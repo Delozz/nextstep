@@ -1,0 +1,10 @@
+streamlit
+pandas
+numpy
+scikit-learn
+plotly
+joblib
+PyPDF2
+pypdf
+google-generativeai
+python-dotenv
