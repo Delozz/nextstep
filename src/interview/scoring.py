@@ -27,7 +27,7 @@ class InterviewScorer:
         
         # Use new google.genai client
         self.client = genai.Client(api_key=self.api_key)
-        self.model_name = 'gemini-2.5-flash'
+        self.model_name = 'gemini-2.5-flash-lite'
         
     async def generate_report(self, session_data: Dict) -> Dict:
         """

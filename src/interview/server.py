@@ -73,7 +73,7 @@ class InterviewSession:
         self.session_id = session_id
         self.config = config
         self.log = SessionLog(session_id, config.target_role, config.user_name)
-        self.model_name = 'gemini-2.5-flash'
+        self.model_name = 'gemini-2.5-flash-lite'
         self.system_prompt = get_interviewer_prompt(self.config.target_role)
         self.conversation_text = ""  # Plain text conversation history
         self.is_active = True
@@ -227,6 +227,19 @@ async def root():
 async def get_roles():
     """Get available interview roles."""
     return {"roles": get_available_roles()}
+
+
+@app.get("/debug/config")
+async def debug_config():
+    """Debug endpoint to show current configuration."""
+    # Create a test session to check what model it would use
+    test_config = InterviewConfig(target_role="Software Engineer", user_name="Test")
+    test_session = InterviewSession("test", test_config)
+    return {
+        "model_name": test_session.model_name,
+        "api_key_configured": bool(API_KEY),
+        "api_key_prefix": API_KEY[:10] + "..." if API_KEY else None
+    }
 
 
 @app.post("/session/create")
