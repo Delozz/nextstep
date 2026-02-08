@@ -41,7 +41,7 @@ load_dotenv()
 API_KEY = os.getenv('GEMINI_API_KEY')
 client = genai.Client(
     api_key=API_KEY,
-    http_options={"api_version": "v1beta"}
+    http_options={"api_version": "v1beta"}  # v1beta for stable Live API
 ) if API_KEY else None
 
 
@@ -58,6 +58,66 @@ VIDEO_FPS = 1  # 1 frame per second (Live API processes at 1 FPS)
 
 # Model name
 MODEL = "models/gemini-2.5-flash-native-audio-preview-12-2025"
+
+
+# Behavioral analysis function tools for real-time feedback
+BEHAVIORAL_TOOLS = [
+    types.Tool(
+        function_declarations=[
+            types.FunctionDeclaration(
+                name="log_behavioral_observation",
+                description="Log a real-time behavioral observation about the candidate based on video and audio analysis. Call this every 20-30 seconds during the interview to track the candidate's presentation.",
+                parameters=types.Schema(
+                    type="OBJECT",
+                    properties={
+                        "eye_contact_score": types.Schema(
+                            type="NUMBER",
+                            description="Score from 0.0 to 1.0 indicating how well the candidate maintains eye contact"
+                        ),
+                        "confidence_level": types.Schema(
+                            type="STRING",
+                            enum=["low", "medium", "high"],
+                            description="Overall confidence level detected from voice and body language"
+                        ),
+                        "emotion_detected": types.Schema(
+                            type="STRING",
+                            description="Primary emotion detected (e.g., calm, nervous, enthusiastic, uncertain)"
+                        ),
+                        "body_language_note": types.Schema(
+                            type="STRING",
+                            description="Brief observation about posture, gestures, or facial expressions"
+                        )
+                    },
+                    required=["confidence_level", "emotion_detected"]
+                )
+            ),
+            types.FunctionDeclaration(
+                name="flag_communication_issue",
+                description="Flag a communication issue detected in real-time. Only call when you notice a significant issue that should be addressed.",
+                parameters=types.Schema(
+                    type="OBJECT",
+                    properties={
+                        "issue_type": types.Schema(
+                            type="STRING",
+                            enum=["filler_words", "hesitation", "unclear", "off_topic", "too_brief", "rambling"],
+                            description="Type of communication issue detected"
+                        ),
+                        "severity": types.Schema(
+                            type="STRING",
+                            enum=["minor", "moderate", "major"],
+                            description="How significant this issue is"
+                        ),
+                        "context": types.Schema(
+                            type="STRING",
+                            description="Brief context about what was happening when the issue occurred"
+                        )
+                    },
+                    required=["issue_type", "severity", "context"]
+                )
+            )
+        ]
+    )
+]
 
 
 @asynccontextmanager
@@ -131,10 +191,11 @@ Adapt your pacing and tone based on the candidate's responses and demeanor."""
 def get_live_config(target_role: str, user_name: str, video_enabled: bool) -> types.LiveConnectConfig:
     """
     Build the Live API configuration using types.LiveConnectConfig.
-    Based on official Google Cookbook example.
     """
     return types.LiveConnectConfig(
         response_modalities=["AUDIO"],  # Native audio output
+        # Note: behavioral tools disabled temporarily due to API compatibility issues
+        # tools=BEHAVIORAL_TOOLS,
         speech_config=types.SpeechConfig(
             voice_config=types.VoiceConfig(
                 prebuilt_voice_config=types.PrebuiltVoiceConfig(
@@ -220,6 +281,76 @@ async def create_session(config: InterviewConfig):
     }
 
 
+async def handle_behavioral_tool_call(
+    gemini_session,
+    log,
+    websocket: WebSocket,
+    func_call
+) -> None:
+    """
+    Handle behavioral analysis function calls from Gemini.
+    Logs observations and sends real-time feedback to client.
+    """
+    func_name = func_call.name
+    args = func_call.args if hasattr(func_call, 'args') else {}
+    
+    print(f"[Interview] Behavioral tool call: {func_name}")
+    
+    try:
+        if func_name == "log_behavioral_observation":
+            # Log the observation
+            eye_contact = args.get("eye_contact_score", 0.5)
+            confidence = args.get("confidence_level", "medium")
+            emotion = args.get("emotion_detected", "neutral")
+            body_note = args.get("body_language_note", "")
+            
+            log.add_behavioral_observation(
+                eye_contact_score=float(eye_contact) if eye_contact else 0.5,
+                body_language_notes=body_note,
+                confidence_indicators=[confidence]
+            )
+            log.add_emotion_snapshot(emotion, confidence)
+            
+            # Send to client for display (optional real-time indicator)
+            await websocket.send_json({
+                "type": "behavioral_update",
+                "data": {
+                    "eye_contact": eye_contact,
+                    "confidence": confidence,
+                    "emotion": emotion
+                }
+            })
+            
+        elif func_name == "flag_communication_issue":
+            # Log the issue
+            issue_type = args.get("issue_type", "unclear")
+            severity = args.get("severity", "minor")
+            context = args.get("context", "")
+            
+            log.add_communication_issue(issue_type, severity, context)
+            
+            # Send real-time feedback to client
+            await websocket.send_json({
+                "type": "behavioral_feedback",
+                "data": {
+                    "issue_type": issue_type,
+                    "severity": severity,
+                    "context": context
+                }
+            })
+        
+        # Send tool response back to Gemini to acknowledge
+        await gemini_session.send_tool_response(
+            types.FunctionResponse(
+                name=func_name,
+                response={"status": "logged"}
+            )
+        )
+        
+    except Exception as e:
+        print(f"[Interview] Error handling tool call {func_name}: {e}")
+
+
 @app.websocket("/ws/interview/{session_id}")
 async def interview_websocket(websocket: WebSocket, session_id: str):
     """
@@ -300,10 +431,26 @@ async def interview_websocket(websocket: WebSocket, session_id: str):
                             # Handle text transcript
                             if text := response.text:
                                 log.append_transcript(f"Interviewer: {text}")
+                                # Send as 'transcript' for real-time audio mode
                                 await websocket.send_json({
                                     "type": "transcript",
                                     "text": text
                                 })
+                                # Also send as 'question' for text-based mode (app.py)
+                                await websocket.send_json({
+                                    "type": "question",
+                                    "text": text,
+                                    "turn_number": turn_count + 1,
+                                    "is_final": False
+                                })
+                            
+                            # Handle function calls from Gemini (behavioral analysis)
+                            # DISABLED: tool call handling has API compatibility issues
+                            # if hasattr(response, 'tool_call') and response.tool_call:
+                            #     for func_call in response.tool_call.function_calls:
+                            #         await handle_behavioral_tool_call(
+                            #             gemini_session, log, websocket, func_call
+                            #         )
                         
                         # Turn complete
                         turn_count += 1
@@ -381,11 +528,27 @@ async def interview_websocket(websocket: WebSocket, session_id: str):
                             
                             elif msg_type == "video":
                                 frame_b64 = data.get("data", "")
+                                log.append_video_frame(frame_b64)  # Store locally for tracking
                                 await outgoing_queue.put({"type": "video", "data": frame_b64})
                             
                             elif msg_type == "text":
                                 text = data.get("text", "")
                                 await outgoing_queue.put({"type": "text", "text": text})
+                            
+                            elif msg_type == "turn":
+                                # Text-based interview: user submitted their answer
+                                user_transcript = data.get("transcript", "")
+                                video_frames = data.get("video_frames", [])
+                                
+                                # Log the transcript
+                                log.append_transcript(f"Candidate: {user_transcript}")
+                                
+                                # Store video frames
+                                for frame in video_frames:
+                                    log.append_video_frame(frame)
+                                
+                                # Send the text to Gemini via the outgoing queue
+                                await outgoing_queue.put({"type": "text", "text": user_transcript})
                             
                             elif msg_type == "end":
                                 is_active = False

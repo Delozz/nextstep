@@ -522,6 +522,18 @@ def render_interview_component(
                         else if (msg.type === 'connected') {{
                             addTranscript('System', 'Using model: ' + msg.model);
                         }}
+                        else if (msg.type === 'behavioral_update') {{
+                            // Real-time behavioral observation from Gemini
+                            console.log('Behavioral update:', msg.data);
+                        }}
+                        else if (msg.type === 'behavioral_feedback') {{
+                            // Communication issue detected - show subtle feedback
+                            const issue = msg.data;
+                            if (issue.severity === 'major') {{
+                                addTranscript('Feedback', `Note: ${issue.issue_type.replace('_', ' ')}`);
+                            }}
+                            console.log('Communication issue:', issue);
+                        }}
                     }};
                     
                     ws.onerror = (err) => {{

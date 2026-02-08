@@ -76,15 +76,44 @@ class InterviewScorer:
     
     def _build_scoring_prompt(self, session_data: Dict) -> str:
         """Build the Gemini prompt for interview scoring."""
+        # Format communication issues for the prompt
+        issues = session_data.get('communication_issues', [])
+        issues_str = "None detected"
+        if issues:
+            issues_str = "; ".join([
+                f"{i['type']} ({i['severity']}): {i.get('context', '')[:50]}"
+                for i in issues[:5]  # Top 5 issues
+            ])
+        
+        # Format emotion timeline
+        emotions = session_data.get('emotion_timeline', [])
+        emotions_str = "Not tracked"
+        if emotions:
+            emotion_counts = {}
+            for e in emotions:
+                em = e.get('emotion', 'unknown')
+                emotion_counts[em] = emotion_counts.get(em, 0) + 1
+            emotions_str = ", ".join([f"{k}: {v}x" for k, v in emotion_counts.items()])
+        
         return f"""You are an expert interview coach evaluating a mock interview for the role of {session_data['target_role']}.
 
 ## INTERVIEW TRANSCRIPT
 {session_data['transcript']}
 
-## BEHAVIORAL OBSERVATIONS
+## REAL-TIME BEHAVIORAL OBSERVATIONS (Gemini-Observed)
+- Total Observations: {session_data['behavioral_summary'].get('total_observations', 0)}
 - Average Eye Contact Score: {session_data['behavioral_summary'].get('avg_eye_contact', 0.5):.2f}/1.0
 - Confidence Indicators: {', '.join(session_data['behavioral_summary'].get('confidence_indicators', ['none observed']))}
-- Notes: {'; '.join(session_data['behavioral_summary'].get('notes', [])[:3])}
+- Body Language Notes: {'; '.join(session_data['behavioral_summary'].get('notes', [])[:3])}
+
+## COMMUNICATION ISSUES DETECTED
+{issues_str}
+
+## EMOTION TIMELINE
+{emotions_str}
+
+## VIDEO ANALYSIS
+- Video Frames Captured: {session_data.get('video_frames_captured', 0)}
 
 ## YOUR TASK
 Evaluate this interview and return a JSON object with:
@@ -99,12 +128,17 @@ Evaluate this interview and return a JSON object with:
         {{"question": "<Q1>", "score": <0-100>, "feedback": "<specific feedback>"}},
         ...
     ],
+    "communication_analysis": {{
+        "filler_words": "<assessment>",
+        "clarity": "<assessment>",
+        "pacing": "<assessment>"
+    }},
     "recommended_next_steps": ["<action 1>", "<action 2>"]
 }}
 
 SCORING GUIDELINES:
 - Content (70% weight): Evaluate clarity, structure, relevance to the role, use of examples, technical accuracy
-- Behavioral (30% weight): Eye contact consistency, vocal confidence, body language, engagement level
+- Behavioral (30% weight): Eye contact consistency, vocal confidence, body language, engagement level, communication issues
 
 Return ONLY valid JSON, no markdown or explanations."""
 

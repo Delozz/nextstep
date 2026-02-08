@@ -37,6 +37,23 @@ class BehavioralObservation:
     confidence_indicators: List[str] = field(default_factory=list)
 
 
+@dataclass
+class CommunicationIssue:
+    """Real-time communication issue detected by Gemini."""
+    timestamp: float
+    issue_type: str  # filler_words, hesitation, unclear, off_topic
+    severity: str  # minor, moderate, major
+    context: str
+
+
+@dataclass
+class EmotionSnapshot:
+    """Emotion detected at a point in time."""
+    timestamp: float
+    emotion: str
+    confidence_level: str  # low, medium, high
+
+
 class SessionLog:
     """
     Manages interview session state and logging.
@@ -53,6 +70,9 @@ class SessionLog:
         self.current_turn: Optional[Turn] = None
         self._audio_buffer: bytes = b""
         self._video_frames: List[str] = []  # base64 frames
+        # Real-time tracking from Gemini function calls
+        self.communication_issues: List[CommunicationIssue] = []
+        self.emotion_timeline: List[EmotionSnapshot] = []
         
     def start_turn(self, question: str) -> None:
         """Start a new interview turn with the given question."""
@@ -98,6 +118,35 @@ class SessionLog:
         self.behavioral_observations.append(observation)
         if self.current_turn:
             self.current_turn.behavioral_notes.append(body_language_notes)
+    
+    def add_communication_issue(
+        self,
+        issue_type: str,
+        severity: str,
+        context: str
+    ) -> None:
+        """Log a communication issue detected in real-time by Gemini."""
+        issue = CommunicationIssue(
+            timestamp=time.time(),
+            issue_type=issue_type,
+            severity=severity,
+            context=context
+        )
+        self.communication_issues.append(issue)
+        print(f"[SessionLog] Communication issue: {issue_type} ({severity})")
+    
+    def add_emotion_snapshot(
+        self,
+        emotion: str,
+        confidence_level: str = "medium"
+    ) -> None:
+        """Log detected emotion at current timestamp."""
+        snapshot = EmotionSnapshot(
+            timestamp=time.time(),
+            emotion=emotion,
+            confidence_level=confidence_level
+        )
+        self.emotion_timeline.append(snapshot)
             
     def end_turn(self) -> None:
         """End the current turn and save it."""
@@ -157,5 +206,24 @@ class SessionLog:
                     "behavioral_notes": t.behavioral_notes
                 }
                 for t in self.turns
-            ]
+            ],
+            # Real-time observations from Gemini function calls
+            "communication_issues": [
+                {
+                    "type": i.issue_type,
+                    "severity": i.severity,
+                    "context": i.context,
+                    "timestamp": i.timestamp
+                }
+                for i in self.communication_issues
+            ],
+            "emotion_timeline": [
+                {
+                    "emotion": e.emotion,
+                    "confidence": e.confidence_level,
+                    "timestamp": e.timestamp
+                }
+                for e in self.emotion_timeline
+            ],
+            "video_frames_captured": len(self._video_frames)
         }

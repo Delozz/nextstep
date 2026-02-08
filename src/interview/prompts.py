@@ -113,10 +113,36 @@ INSTRUCTIONS:
 Begin by introducing yourself briefly and asking about their background."""
 }
 
+# Instructions for real-time behavioral analysis via function calling
+BEHAVIORAL_ANALYSIS_INSTRUCTIONS = """
+## REAL-TIME BEHAVIORAL ANALYSIS
+
+You have access to tools for logging behavioral observations during the interview. Use them ACTIVELY throughout the conversation:
+
+### log_behavioral_observation
+Call this every 20-30 seconds to track the candidate's presentation:
+- eye_contact_score (0.0-1.0): How well they maintain eye contact with the camera
+- confidence_level (low/medium/high): Overall confidence from voice and body language
+- emotion_detected: Primary emotion (e.g., calm, nervous, enthusiastic, uncertain, engaged)
+- body_language_note: Brief observation about posture, gestures, or expressions
+
+### flag_communication_issue
+Call this IMMEDIATELY when you detect significant issues:
+- filler_words: Excessive "um", "like", "you know", "so"
+- hesitation: Long pauses (>5 seconds) before answering
+- unclear: Vague or confusing explanations
+- off_topic: Tangents unrelated to the question
+- too_brief: Answers that lack substance
+- rambling: Overly long answers without clear structure
+
+These observations directly power the candidate's detailed feedback report. Be thorough but fair in your assessments.
+"""
+
 
 def get_interviewer_prompt(role: str) -> str:
     """Get the interviewer system prompt for the given role."""
-    return INTERVIEWER_PROMPTS.get(role, INTERVIEWER_PROMPTS["Default"])
+    base_prompt = INTERVIEWER_PROMPTS.get(role, INTERVIEWER_PROMPTS["Default"])
+    return base_prompt + BEHAVIORAL_ANALYSIS_INSTRUCTIONS
 
 
 def get_available_roles() -> list:
