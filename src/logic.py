@@ -104,8 +104,8 @@ def project_savings(monthly_net, rent, col_index, lifestyle='Balanced'):
     # Lifestyle multipliers for discretionary spending
     lifestyle_multipliers = {
         'Frugal': 0.5,    # 50% of discretionary on fun
-        'Balanced': 0.7,   # 70% of discretionary on fun  
-        'Boujee': 1.2      # 120% of discretionary on fun (going into debt)
+        'Balanced': 0.7,   # 70% of discretionary on fun
+        'Fancy': 0.9      # 90% of discretionary on fun (going into debt)
     }
     
     multiplier = lifestyle_multipliers.get(lifestyle, 0.7)
