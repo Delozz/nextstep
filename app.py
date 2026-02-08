@@ -725,9 +725,6 @@ with tab4:
         
         st.divider()
         
-        # Check if server is needed
-        st.warning("📢 **Make sure the interview server is running:** `uvicorn src.interview.server:app --reload --port 8000`")
-        
         if st.button("🚀 Start Voice Interview", type="primary", use_container_width=True):
             st.session_state['voice_interview_mode'] = 'active'
             st.rerun()
