@@ -5,23 +5,23 @@ import os
 
 # --- CONFIGURATION ---
 CAREER_BASE_SALARIES = {
-    'Software Engineer': 115000,
-    'Data Scientist': 110000,
-    'Cybersecurity Analyst': 105000,
-    'UX Designer': 95000,
-    'Product Manager': 120000,
-    'Machine Learning Engineer': 125000,
-    'Cloud Architect': 130000,
-    'Data Engineer': 115000,
-    'DevOps Engineer': 110000
+    'Software Engineer': 100000,
+    'Data Scientist': 90000,
+    'Cybersecurity Analyst': 90000,
+    'UX Designer': 80000,
+    'Product Manager': 110000,
+    'Machine Learning Engineer': 110000,
+    'Cloud Architect': 90000,
+    'Data Engineer': 90000,
+    'DevOps Engineer': 95000
 }
 
 # Tier Multipliers (Higher Tier = Higher Salary)
 TIER_MULTIPLIERS = {
-    1: 1.35,  # SF, NYC
+    1: 1.2,  # SF, NYC
     2: 1.15,  # Austin, Denver
-    3: 0.95,  # Raleigh, SLC
-    4: 0.85   # College Towns
+    3: 1.0,  # Raleigh, SLC
+    4: 1.0   # College Towns
 }
 
 BASE_CITIES = [

@@ -135,11 +135,13 @@ def project_5yr_wealth(monthly_net, rent, col_index):
     current_net = monthly_net
     current_rent = rent
     living_expenses = (col_index / 100) * 1200  # Baseline food/fun
+
+    savings_rate = 0.7  # Assume balanced lifestyle for projection
     
     wealth_timeline = []
     
     for year in range(1, 6):
-        yearly_savings = (current_net - current_rent - living_expenses) * 12
+        yearly_savings = (current_net - current_rent - living_expenses) * 12 * savings_rate
         cumulative_wealth += yearly_savings
         wealth_timeline.append(cumulative_wealth)
         
