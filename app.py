@@ -50,7 +50,7 @@ with st.sidebar:
     
     st.divider()
     
-    st.markdown("<h3 style='text-align: center; color: #00FF94;'>📄 Upload Your Resume</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center; color: #00FF94;'> Upload Your Resume</h3>", unsafe_allow_html=True)
     
     # Use empty placeholder for stable rendering
     animation_placeholder = st.empty()
@@ -91,16 +91,16 @@ with st.sidebar:
                 api_key = os.getenv('GEMINI_API_KEY')
                 if not api_key:
                     loading_placeholder.empty()
-                    st.warning("⚠️ API key not found.")
+                    st.warning(" API key not found.")
                     st.session_state['ai_results'] = None
                 else:
                     ai_results = parse_resume_with_ai(uploaded_file, api_key)
                     st.session_state['ai_results'] = ai_results
                     loading_placeholder.empty()
-                    st.success("✅ AI Analysis Complete!")
+                    st.success(" AI Analysis Complete!")
             except Exception as e:
                 loading_placeholder.empty()
-                st.error(f"❌ AI Analysis failed: {e}")
+                st.error(f" AI Analysis failed: {e}")
                 st.session_state['ai_results'] = None
             
             # Flag to switch to Resume Pivot tab after rerun
@@ -115,7 +115,7 @@ filtered_data = df[df['Category'] == selected_category].copy()
 
 # Check if filtered data is empty
 if filtered_data.empty:
-    st.error(f"⚠️ No data found for {selected_category}. Please select a different career path.")
+    st.error(f" No data found for {selected_category}. Please select a different career path.")
     st.stop()
 
 # --- DYNAMIC METRICS CALCULATION ---
@@ -145,11 +145,11 @@ top_city_savings = project_savings(top_city_net, top_city_row['Rent'], top_city_
 top_city_savings -= ((debt / 10000) * 115 if debt > 0 else 0)  # Subtract loan payment
 
 col1, col2, col3 = st.columns(3)
-col1.metric("🎯 Best City for You", top_city, f"Score: {top_score}/100")
+col1.metric(" Best City for You", top_city, f"Score: {top_score}/100")
 
 # Wealth Velocity with progress bar in col2
 with col2:
-    st.metric("💰 Wealth Velocity", f"${top_city_savings:,.0f}/mo", f"in {top_city}")
+    st.metric(" Wealth Velocity", f"${top_city_savings:,.0f}/mo", f"in {top_city}")
     # Progress bar for Financial Freedom based on savings (cap at $5,000)
     if top_city_savings > 0:
         progress_value = min(top_city_savings / 5000, 1.0)
@@ -157,7 +157,7 @@ with col2:
     else:
         st.progress(0, text="Financial Freedom Progress")
 
-col3.metric("💼 Average Salary", f"${avg_salary:,.0f}", "For this role")
+col3.metric(" Average Salary", f"${avg_salary:,.0f}", "For this role")
 
 st.divider()
 
@@ -173,7 +173,7 @@ if st.session_state.get('switch_to_resume_tab', False):
             if (tabs.length >= 3) { tabs[2].click(); }
         </script>
     """, height=0)
-    st.toast('🤖 AI Analysis Complete! Results are in the Resume Pivot tab.', icon='✅')
+    st.toast(' AI Analysis Complete! Results are in the Resume Pivot tab.', icon='✅')
 
 # ========== TAB 1: MAP VIEW ==========
 with tab1:
@@ -207,14 +207,12 @@ with tab1:
     # Create custom hover template with sci-fi HUD styling
     map_data['hover_text'] = map_data.apply(
         lambda row: (
-            f"<b>◢ TARGET ACQUIRED ◣</b><br>"
             f"<b>LOCATION:</b> {row['City']}, {row['State']}<br>"
             f"<b>SALARY PROJECTION:</b> ${row['Salary']:,.0f}/yr<br>"
             f"<b>HOUSING COST:</b> ${row['Rent']:,.0f}/mo<br>"
             f"<b>COST INDEX:</b> {row['COL']}<br>"
             f"<b>MISSION STATUS:</b> {int(row['Thriving_Score'])}% VIABLE<br>"
             f"<b>━━━━━━━━━━━━━━━━</b><br>"
-            f"<b>THREAT LEVEL:</b> {'🟢 SAFE' if row['Thriving_Score'] >= 70 else '🟡 CAUTION' if row['Thriving_Score'] >= 50 else '🔴 DANGER'}"
         ),
         axis=1
     )
@@ -258,7 +256,7 @@ with tab1:
             ),
             tickfont=dict(color='#00FF94'),
             bgcolor='rgba(255, 255, 255, 0.05)',
-            bordercolor='#00FF94',
+            bordercolor="#9A0A0A",
             borderwidth=2,
             len=0.7
         ),
@@ -278,14 +276,14 @@ with tab2:
     st.subheader("Financial Reality Check")
     
     # Add city selector for deep dive analysis with toast notification
-    target_city = st.selectbox('🎯 Analyze a City', filtered_data['City'].unique())
+    target_city = st.selectbox(' Analyze a City', filtered_data['City'].unique())
     
     # Trigger toast when city changes
     if 'last_selected_city' not in st.session_state:
         st.session_state['last_selected_city'] = target_city
     
     if st.session_state['last_selected_city'] != target_city:
-        st.toast(f'🏙️ Simulation Updated: {target_city} selected', icon='🏙️')
+        st.toast(f' Simulation Updated: {target_city} selected', icon='🏙️')
         st.session_state['last_selected_city'] = target_city
     
     # Get the specific city data
@@ -368,26 +366,26 @@ with tab2:
         
         # Dynamic insight sentence with gaming terminology
         if monthly_savings > 0:
-            st.success(f"💰 In **{target_city}**, your Wealth Velocity is **${monthly_savings:,.2f}/mo** - Building your empire!")
+            st.success(f" In **{target_city}**, your Wealth Velocity is **${monthly_savings:,.2f}/mo** - Building your empire!")
         else:
-            st.error(f"⚠️ In **{target_city}**, Burn Rate exceeds income by **${abs(monthly_savings):,.2f}/mo** with {lifestyle} lifestyle.")
+            st.error(f" In **{target_city}**, Burn Rate exceeds income by **${abs(monthly_savings):,.2f}/mo** with {lifestyle} lifestyle.")
     
     # Right Column: Success Checklist & Updated Metrics (POST-GAME STATS)
     with right_col:
-        st.markdown("### 📊 Post-Game Financial Stats")
+        st.markdown("###  Post-Game Financial Stats")
         
         # Display key metrics with gaming terminology
         col_a, col_b = st.columns(2)
         with col_a:
-            st.metric("💵 Net Income", f"${monthly_net:,.0f}/mo", "After taxes")
-            st.metric("🔥 Burn Rate", f"${city_rent:,.0f}/mo", "Housing cost")
+            st.metric(" Net Income", f"${monthly_net:,.0f}/mo", "After taxes")
+            st.metric(" Spending Rate", f"${city_rent:,.0f}/mo", "Housing cost")
         with col_b:
-            st.metric("💰 Wealth Velocity", f"${monthly_savings:,.0f}/mo", 
-                     "💰" if monthly_savings > 1000 else ("⚠️" if monthly_savings < 0 else "📊"))
-            st.metric("📈 Annual Projection", f"${monthly_savings * 12:,.0f}/yr", "If consistent")
+            st.metric(" Wealth Velocity", f"${monthly_savings:,.0f}/mo", 
+                    "💰" if monthly_savings > 1000 else ("⚠️" if monthly_savings < 0 else "📊"))
+            st.metric(" Annual Projection", f"${monthly_savings * 12:,.0f}/yr", "If consistent")
         
         # Progress bar for Wealth Velocity (cap at $5,000)
-        st.markdown("#### 🎯 Financial Freedom Progress")
+        st.markdown("####  Retirement Progress")
         if monthly_savings > 0:
             wealth_progress = min(monthly_savings / 5000, 1.0)
             st.progress(wealth_progress, text=f"Wealth Building: {int(wealth_progress * 100)}% to Elite Status")
@@ -419,7 +417,7 @@ with tab3:
             <div style='background: linear-gradient(135deg, #00FF94 0%, #00E5FF 100%); 
                         padding: 25px; border-radius: 15px; margin-bottom: 25px;
                         box-shadow: 0 10px 30px rgba(0,0,0,0.3);'>
-                <h2 style='color: #0a0e27; margin: 0; text-align: center;'>🎉 Your AI Resume Analysis is Ready!</h2>
+                <h2 style='color: #0a0e27; margin: 0; text-align: center;'> Your AI Resume Analysis is Ready!</h2>
                 <p style='color: #0a0e27; margin: 10px 0 0 0; text-align: center; font-weight: 600;'>Scroll down to see detailed insights</p>
             </div>
         """, unsafe_allow_html=True)
@@ -432,14 +430,14 @@ with tab3:
         st.markdown("""
             <div style='background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); 
                         padding: 25px; border-radius: 12px; margin-bottom: 20px;'>
-                <h2 style='color: white; margin: 0;'>🤖 AI-Powered Resume Analysis</h2>
+                <h2 style='color: white; margin: 0;'>\ AI-Powered Resume Analysis</h2>
                 <p style='color: rgba(255,255,255,0.9); margin: 5px 0;'>Deep analysis powered by Gemini AI</p>
             </div>
         """, unsafe_allow_html=True)
         
         # Display key AI insights
         if 'tech_skills' in ai_data and ai_data['tech_skills']:
-            st.markdown("### 🎯 Skills Identified by AI")
+            st.markdown("###  Skills Identified by AI")
             skills_text = ", ".join(ai_data['tech_skills'][:10])  # Show top 10
             st.success(f"**Detected Skills:** {skills_text}")
         
@@ -448,7 +446,7 @@ with tab3:
             st.info(ai_data['career_summary'])
         
         if 'recommended_roles' in ai_data:
-            st.markdown("### 💡 Recommended Roles for You")
+            st.markdown("###  Recommended Roles for You")
             for rec in ai_data['recommended_roles'][:5]:  # Show top 5
                 st.write(f"• {rec}")
         
@@ -471,7 +469,7 @@ with tab3:
     relevant_keywords = STEM_KEYWORDS.get(selected_category, ['Python', 'SQL', 'Git', 'Communication', 'Problem Solving'])
     
     if uploaded_file is not None:
-        st.success(f"✅ Resume uploaded: **{uploaded_file.name}**")
+        st.success(f" Resume uploaded: **{uploaded_file.name}**")
         
         # Try to extract text from PDF
         resume_text = ""
@@ -483,7 +481,7 @@ with tab3:
                 resume_text += page.extract_text().upper()
         except ImportError:
             # Fallback: Mock resume text for demo if pypdf not installed
-            st.info("📝 Using demo analysis mode (install pypdf for real PDF parsing)")
+            st.info(" Using demo analysis mode (install pypdf for real PDF parsing)")
             resume_text = """
             EXPERIENCED SOFTWARE ENGINEER WITH PYTHON, JAVASCRIPT, AND REACT EXPERIENCE.
             WORKED WITH AWS, DOCKER, AND GIT IN PRODUCTION ENVIRONMENTS.
@@ -500,7 +498,7 @@ with tab3:
         col_left, col_right = st.columns([1, 1])
         
         with col_left:
-            st.markdown("### 🎯 Keywords Found")
+            st.markdown("###  Keywords Found")
             st.caption("Skills detected in your resume")
             
             found_keywords = []
@@ -513,7 +511,7 @@ with tab3:
                 st.warning("No keywords detected. Make sure your resume includes technical skills!")
         
         with col_right:
-            st.markdown("### 📈 Skills to Add")
+            st.markdown("###  Skills to Add")
             st.caption("Boost your resume with these")
             
             missing_keywords = []
@@ -523,19 +521,19 @@ with tab3:
                     st.markdown(f"<div style='background-color: #4d1a1a; padding: 8px; margin: 4px 0; border-radius: 5px; border-left: 4px solid #ff4444;'>❌ <b>{keyword}</b> - Recommended</div>", unsafe_allow_html=True)
             
             if not missing_keywords:
-                st.success("🎉 You have all the key skills!")
+                st.success(" You have all the key skills!")
         
         st.divider()
         
         # Analysis Summary
-        st.markdown("### 📊 Analysis Summary")
+        st.markdown("###  Analysis Summary")
         match_percentage = (len(found_keywords) / len(relevant_keywords)) * 100 if relevant_keywords else 0
         
         col1, col2, col3 = st.columns(3)
         col1.metric("Keywords Found", f"{len(found_keywords)}/{len(relevant_keywords)}", f"{match_percentage:.0f}% match")
         col2.metric("Skills Gap", len(missing_keywords), "to learn")
         col3.metric("Career Fit", "Strong" if match_percentage > 60 else ("Medium" if match_percentage > 30 else "Growing"), 
-                "🎯" if match_percentage > 60 else "📈")
+                "" if match_percentage > 60 else "")
         
         # Progress bar
         st.progress(match_percentage / 100)
@@ -554,21 +552,21 @@ with tab3:
     
     else:
         # No file uploaded - show prompt
-        st.warning("📄 Upload your resume in the sidebar to get an instant keyword analysis!")
+        st.warning(" Upload your resume in the sidebar to get an instant keyword analysis!")
         
         st.markdown("---")
         
         # Preview of what they'll get
         col_a, col_b = st.columns(2)
         with col_a:
-            st.markdown("#### 🔍 What We Analyze")
+            st.markdown("####  What We Analyze")
             st.write(f"✓ **{len(relevant_keywords)} key skills** for {selected_category}")
             st.write("✓ **ATS-friendly keywords** (what recruiters search for)")
             st.write("✓ **Skills gap analysis** to prioritize learning")
             st.write("✓ **Career fit score** for your target role")
         
         with col_b:
-            st.markdown("#### 🎯 Hot Keywords for Your Role")
+            st.markdown("####  Hot Keywords for Your Role")
             st.caption(f"Top skills for {selected_category}:")
             for keyword in relevant_keywords[:6]:  # Show first 6
                 st.markdown(f"<div style='background-color: #1E2130; padding: 6px 12px; margin: 4px 0; border-radius: 5px; display: inline-block;'>🔹 {keyword}</div>", unsafe_allow_html=True)
