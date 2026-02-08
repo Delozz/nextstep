@@ -36,78 +36,208 @@ if 'lottie_loaded' not in st.session_state:
     st.session_state['robot_animation'] = load_lottie_url(lottie_animations['ai_brain'])
     st.session_state['lottie_loaded'] = True
 
-# --- SIDEBAR: USER INPUTS ---
+# Initialize onboarding state
+if 'onboarding_complete' not in st.session_state:
+    st.session_state['onboarding_complete'] = False
+
+# ======================================
+# ONBOARDING FLOW
+# ======================================
+if not st.session_state['onboarding_complete']:
+    # Hide sidebar during onboarding
+    st.markdown("""
+        <style>
+        [data-testid="stSidebar"] { display: none; }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    # Center everything
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        # Hero section
+        st.markdown("""
+            <div style='text-align: center; margin-bottom: 40px;'>
+                <h1 style='font-size: 56px; margin: 0; background: linear-gradient(135deg, #00FF94 0%, #00E5FF 100%); 
+                           -webkit-background-clip: text; -webkit-text-fill-color: transparent;'>
+                    NextStep
+                </h1>
+                <p style='font-size: 20px; color: rgba(255,255,255,0.8); margin-top: 10px;'>
+                    Plan your life after the cap and gown
+                </p>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        # Robot animation
+        if st.session_state.get('robot_animation'):
+            st_lottie(st.session_state['robot_animation'], height=200, key="onboarding_robot")
+        
+        st.markdown("<h2 style='text-align: center; color: #00FF94; margin: 30px 0;'>Let's Get Started 🚀</h2>", unsafe_allow_html=True)
+        
+        # Onboarding form
+        with st.form("onboarding_form"):
+            st.markdown("""
+                <style>
+                /* Center the entire form */
+                .stForm { max-width: 700px; margin: 0 auto; }
+                .stForm label { text-align: center !important; display: block !important; }
+                
+                /* Remove external box/border from text inputs */
+                .stForm .stTextInput > div {
+                    border: none !important;
+                    box-shadow: none !important;
+                    background: transparent !important;
+                }
+                
+                /* Center all input containers */
+                .stForm > div > div { margin: 0 auto !important; max-width: 100% !important; }
+                .stForm .stTextInput, .stForm .stSelectbox, .stForm .stNumberInput, .stForm .stSlider {
+                    display: flex !important;
+                    flex-direction: column !important;
+                    align-items: center !important;
+                }
+                
+                /* Center the actual input elements */
+                .stForm input[type="text"] { text-align: center !important; }
+                .stForm input[type="number"] { text-align: center !important; }
+                
+                /* Force dropdown menu to open downwards */
+                .stForm div[data-baseweb="popover"] {
+                    margin-top: 5px !important;
+                }
+                
+                /* Hide cursor in selectbox but keep it functional */
+                .stForm div[data-baseweb="select"] input[role="combobox"] {
+                    caret-color: transparent !important;
+                }
+                </style>
+            """, unsafe_allow_html=True)
+            
+            user_name = st.text_input("What's your name?", placeholder="Enter your name", key="onboard_name")
+            
+            st.divider()
+            
+            available_categories = df['Category'].unique()
+            selected_category = st.selectbox("What's your ideal career path?", available_categories, key="onboard_category")
+            
+            st.divider()
+            
+            debt = st.number_input("Student Loan Debt ($)", min_value=0, max_value=500000, value=30000, step=1000, key="onboard_debt")
+            
+            lifestyle = st.select_slider("Lifestyle Preference", options=["Frugal", "Balanced", "Boujee"], value="Balanced", key="onboard_lifestyle")
+            
+            st.divider()
+            
+            st.markdown("<h3 style='color: #00FF94; text-align: center;'>📄 Upload Your Resume (Optional)</h3>", unsafe_allow_html=True)
+            uploaded_file = st.file_uploader("", type="pdf", label_visibility="collapsed", key="onboard_resume")
+            
+            st.divider()
+            
+            # Submit button
+            submitted = st.form_submit_button("🚀 Launch My Future", use_container_width=True)
+            
+            if submitted:
+                if not user_name:
+                    st.error("Please enter your name to continue!")
+                else:
+                    # Store all user data in session state
+                    st.session_state['user_name'] = user_name
+                    st.session_state['selected_category'] = selected_category
+                    st.session_state['debt'] = debt
+                    st.session_state['lifestyle'] = lifestyle
+                    st.session_state['uploaded_file'] = uploaded_file
+                    
+                    # Process resume if uploaded
+                    if uploaded_file is not None:
+                        with st.spinner("🤖 AI is analyzing your resume..."):
+                            try:
+                                from src.resume_parser import parse_resume_with_ai
+                                
+                                api_key = os.getenv('GEMINI_API_KEY')
+                                if api_key:
+                                    ai_results = parse_resume_with_ai(uploaded_file, api_key)
+                                    st.session_state['ai_results'] = ai_results
+                                    st.success("✅ Resume analyzed!")
+                                else:
+                                    st.warning("⚠️ API key not found. Skipping AI analysis.")
+                                    st.session_state['ai_results'] = None
+                            except Exception as e:
+                                st.error(f"❌ Resume analysis failed: {e}")
+                                st.session_state['ai_results'] = None
+                    
+                    # Mark onboarding as complete
+                    st.session_state['onboarding_complete'] = True
+                    st.session_state['switch_to_resume_tab'] = uploaded_file is not None
+                    st.rerun()
+    
+    st.stop()  # Stop here if onboarding not complete
+
+# ======================================
+# MAIN APP (after onboarding)
+# ======================================
+
+# Get user data from session state
+user_name = st.session_state.get('user_name', 'User')
+selected_category = st.session_state.get('selected_category', df['Category'].unique()[0])
+debt = st.session_state.get('debt', 30000)
+lifestyle = st.session_state.get('lifestyle', 'Balanced')
+uploaded_file = st.session_state.get('uploaded_file', None)
+
+# --- SIDEBAR: USER INFO & CONTROLS ---
 with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=50)
     st.title("NextStep")
-    st.write("Plan your life after the cap and gown.")
-    
-    # Get available categories from data
-    available_categories = df['Category'].unique()
-    selected_category = st.selectbox("Select your Career Path", available_categories)
-    debt = st.number_input("Student Loan Debt ($)", min_value=0, max_value=500000, value=30000, step=1000)
-    lifestyle = st.select_slider("Lifestyle Preference", options=["Frugal", "Balanced", "Boujee"])
+    st.markdown(f"### Welcome, {user_name}! 👋")
     
     st.divider()
     
-    st.markdown("<h3 style='text-align: center; color: #00FF94;'>📄 Upload Your Resume</h3>", unsafe_allow_html=True)
+    st.markdown("#### Update Your Settings")
     
-    # Use empty placeholder for stable rendering
-    animation_placeholder = st.empty()
+    # Allow users to change their inputs
+    available_categories = df['Category'].unique()
+    selected_category = st.selectbox("Career Path", available_categories, index=list(available_categories).index(selected_category) if selected_category in available_categories else 0, key="main_category")
     
-    # Only show animation if not processing
-    if not st.session_state.get('is_processing', False):
-        with animation_placeholder.container():
-            if st.session_state.get('robot_animation'):
-                st_lottie(st.session_state['robot_animation'], height=150, key="robot_anim")
+    debt = st.number_input("Student Loan Debt ($)", min_value=0, max_value=500000, value=debt, step=1000, key="main_debt")
     
-    uploaded_file = st.file_uploader("", type="pdf", label_visibility="collapsed")
+    lifestyle = st.select_slider("Lifestyle Preference", options=["Frugal", "Balanced", "Boujee"], value=lifestyle, key="main_lifestyle")
     
-    if st.button("Calculate Future"):
-        st.session_state['calculate_clicked'] = True
-        
-        if uploaded_file is not None:
-            # Don't set is_processing flag - just do the work
-            # Show custom loading screen
-            loading_placeholder = st.empty()
-            with loading_placeholder.container():
-                st.markdown("""
-                    <div style='text-align: center; padding: 50px; background: rgba(255,255,255,0.05); border-radius: 15px; margin: 20px 0;'>
-                        <div style='display: inline-block; width: 60px; height: 60px; border: 6px solid rgba(0,255,148,0.2); 
-                                    border-top-color: #00FF94; border-radius: 50%; animation: spin 1s linear infinite;'></div>
-                        <h2 style='color: #00FF94; margin-top: 20px;'>🤖 AI Analyzing Resume...</h2>
-                        <p style='color: rgba(255,255,255,0.7);'>Extracting skills and insights</p>
-                    </div>
-                    <style>
-                        @keyframes spin {
-                            to { transform: rotate(360deg); }
-                        }
-                    </style>
-                """, unsafe_allow_html=True)
-            
+    st.divider()
+    
+    st.markdown("#### 📄 Upload Resume")
+    
+    # Show robot animation
+    if st.session_state.get('robot_animation'):
+        st_lottie(st.session_state['robot_animation'], height=120, key="sidebar_robot")
+    
+    new_uploaded_file = st.file_uploader("Upload a new resume", type="pdf", label_visibility="collapsed", key="main_resume")
+    
+    if new_uploaded_file is not None and new_uploaded_file != uploaded_file:
+        with st.spinner("🤖 Analyzing new resume..."):
             try:
                 from src.resume_parser import parse_resume_with_ai
                 
                 api_key = os.getenv('GEMINI_API_KEY')
-                if not api_key:
-                    loading_placeholder.empty()
-                    st.warning("⚠️ API key not found.")
-                    st.session_state['ai_results'] = None
-                else:
-                    ai_results = parse_resume_with_ai(uploaded_file, api_key)
+                if api_key:
+                    ai_results = parse_resume_with_ai(new_uploaded_file, api_key)
                     st.session_state['ai_results'] = ai_results
-                    loading_placeholder.empty()
-                    st.success("✅ AI Analysis Complete!")
+                    st.session_state['uploaded_file'] = new_uploaded_file
+                    st.success("✅ Resume analyzed!")
+                    st.session_state['switch_to_resume_tab'] = True
+                    st.rerun()
+                else:
+                    st.warning("⚠️ API key not found.")
             except Exception as e:
-                loading_placeholder.empty()
-                st.error(f"❌ AI Analysis failed: {e}")
-                st.session_state['ai_results'] = None
-            
-            # Flag to switch to Resume Pivot tab after rerun
-            st.session_state['switch_to_resume_tab'] = True
-        else:
-            st.session_state['ai_results'] = None
-        
+                st.error(f"❌ Analysis failed: {e}")
+    
+    # Update session state when values change
+    if selected_category != st.session_state.get('selected_category'):
+        st.session_state['selected_category'] = selected_category
+        st.rerun()
+    if debt != st.session_state.get('debt'):
+        st.session_state['debt'] = debt
+        st.rerun()
+    if lifestyle != st.session_state.get('lifestyle'):
+        st.session_state['lifestyle'] = lifestyle
         st.rerun()
 
 # --- FILTER DATA BASED ON SELECTION ---
@@ -180,7 +310,7 @@ with tab1:
     st.subheader(f"Where can a {selected_category} thrive?")
     
     # Use filtered data (we already checked it's not empty earlier)
-    map_data = filtered_data
+    map_data = filtered_data.copy()
     
     # Get top city from filtered data
     top_row = filtered_data.loc[filtered_data['Salary'].idxmax()]
@@ -204,17 +334,16 @@ with tab1:
     # Normalize salary for bubble size (make high salaries REALLY pop)
     map_data['Salary_Normalized'] = (map_data['Salary'] / map_data['Salary'].min()) * 50
     
-    # Create custom hover template with sci-fi HUD styling
+    # Create professional hover template
     map_data['hover_text'] = map_data.apply(
         lambda row: (
-            f"<b>◢ TARGET ACQUIRED ◣</b><br>"
-            f"<b>LOCATION:</b> {row['City']}, {row['State']}<br>"
-            f"<b>SALARY PROJECTION:</b> ${row['Salary']:,.0f}/yr<br>"
-            f"<b>HOUSING COST:</b> ${row['Rent']:,.0f}/mo<br>"
-            f"<b>COST INDEX:</b> {row['COL']}<br>"
-            f"<b>MISSION STATUS:</b> {int(row['Thriving_Score'])}% VIABLE<br>"
-            f"<b>━━━━━━━━━━━━━━━━</b><br>"
-            f"<b>THREAT LEVEL:</b> {'🟢 SAFE' if row['Thriving_Score'] >= 70 else '🟡 CAUTION' if row['Thriving_Score'] >= 50 else '🔴 DANGER'}"
+            f"<b>{row['City']}, {row['State']}</b><br>"
+            f"<b>Annual Salary:</b> ${row['Salary']:,.0f}<br>"
+            f"<b>Monthly Rent:</b> ${row['Rent']:,.0f}<br>"
+            f"<b>Cost of Living Index:</b> {row['COL']}<br>"
+            f"<b>Thriving Score:</b> {int(row['Thriving_Score'])}/100<br>"
+            f"━━━━━━━━━━━━━━━━<br>"
+            f"<b>Rating:</b> {'Excellent' if row['Thriving_Score'] >= 80 else 'Very Good' if row['Thriving_Score'] >= 70 else 'Good' if row['Thriving_Score'] >= 60 else 'Fair' if row['Thriving_Score'] >= 50 else 'Challenging'}"
         ),
         axis=1
     )
@@ -230,8 +359,8 @@ with tab1:
         size_max=45,  # Larger max size for dramatic effect
         zoom=3,
         center={"lat": 37.0902, "lon": -95.7129},
-        mapbox_style="carto-darkmatter",  # Dark mode command center aesthetic
-        title=f"<b>COMMAND CENTER</b> // {selected_category.upper()} DEPLOYMENT ZONES",
+        mapbox_style="carto-darkmatter",  # Dark mode aesthetic
+        title=f"<b>{selected_category}</b> Opportunities Across the US",
         custom_data=['hover_text']
     )
     
