@@ -982,6 +982,7 @@ with tab4:
                 let transcript = '';
                 let turnNumber = 0;
                 let totalTurns = 5;
+                let interviewEnded = false;
                 let audioContext = null;
                 let analyser = null;
                 let videoFrames = [];
@@ -1091,8 +1092,8 @@ with tab4:
                     }};
                     
                     recognition.onend = () => {{
-                        // Restart recognition if interview is still active
-                        if (ws && ws.readyState === WebSocket.OPEN) {{
+                        // Restart recognition only if interview is still active
+                        if (!interviewEnded && ws && ws.readyState === WebSocket.OPEN) {{
                             try {{ recognition.start(); }} catch(e) {{}}
                         }}
                     }};
@@ -1160,28 +1161,102 @@ with tab4:
                         
                         if (data.type === 'question') {{
                             document.getElementById('currentQuestion').textContent = data.text;
-                            turnNumber = data.turn_number || turnNumber + 1;
-                            document.getElementById('progressFill').style.width = ((turnNumber / totalTurns) * 100) + '%';
-                            document.getElementById('turnIndicator').textContent = '🎤 Question ' + turnNumber + '/' + totalTurns;
-                            updateStatus('Listening...', 'active');
-                            
-                            // Clear transcript for new question
-                            transcript = '';
-                            document.getElementById('transcript').textContent = 'Start speaking...';
-                            document.getElementById('submitBtn').disabled = true;
                             
                             if (data.is_final) {{
-                                // Interview complete
-                                updateStatus('Interview complete!', 'processing');
+                                // Interview complete - stop everything
+                                interviewEnded = true;
+                                if (recognition) try {{ recognition.stop(); }} catch(e) {{}}
+                                if (frameInterval) clearInterval(frameInterval);
+                                
+                                document.getElementById('progressFill').style.width = '100%';
+                                document.getElementById('turnIndicator').textContent = '✅ Complete';
+                                document.getElementById('submitBtn').disabled = true;
+                                document.getElementById('submitBtn').style.display = 'none';
+                                document.getElementById('transcript').textContent = 'Interview concluded. Generating report...';
+                                updateStatus('Generating report...', 'processing');
+                            }} else {{
+                                turnNumber = data.turn_number || turnNumber + 1;
+                                // Cap display at totalTurns
+                                let displayTurn = Math.min(turnNumber, totalTurns);
+                                document.getElementById('progressFill').style.width = ((displayTurn / totalTurns) * 100) + '%';
+                                document.getElementById('turnIndicator').textContent = '🎤 Question ' + displayTurn + '/' + totalTurns;
+                                updateStatus('Listening...', 'active');
+                                
+                                // Clear transcript for new question
+                                transcript = '';
+                                document.getElementById('transcript').textContent = 'Start speaking...';
+                                document.getElementById('submitBtn').disabled = true;
                             }}
                         }}
                         
                         if (data.type === 'report') {{
-                            // Store report and signal completion
+                            // Stop media
+                            if (recognition) try {{ recognition.stop(); }} catch(e) {{}}
+                            if (frameInterval) clearInterval(frameInterval);
+                            if (mediaStream) {{
+                                mediaStream.getTracks().forEach(track => track.stop());
+                            }}
+                            
+                            // Close websocket
+                            if (ws) try {{ ws.close(); }} catch(e) {{}}
+                            
                             window.interviewReport = data.data;
                             updateStatus('Report ready!', 'active');
-                            document.getElementById('currentQuestion').textContent = '✅ Interview Complete! Close this window to see your report.';
                             document.getElementById('submitBtn').style.display = 'none';
+                            
+                            // Display the report inline
+                            const r = data.data;
+                            const mainContent = document.getElementById('mainContent');
+                            mainContent.innerHTML = `
+                                <div style="grid-column: 1 / -1;">
+                                    <h2 style="color: #00FF94; margin-bottom: 16px;">📊 Interview Report</h2>
+                                    
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 24px;">
+                                        <div style="background: rgba(0,255,148,0.15); padding: 20px; border-radius: 12px; text-align: center;">
+                                            <div style="font-size: 36px; font-weight: 700; color: #00FF94;">${{r.final_score || 0}}</div>
+                                            <div style="opacity: 0.7; margin-top: 4px;">Final Score</div>
+                                        </div>
+                                        <div style="background: rgba(0,217,255,0.15); padding: 20px; border-radius: 12px; text-align: center;">
+                                            <div style="font-size: 36px; font-weight: 700; color: #00D9FF;">${{r.content_score || 0}}</div>
+                                            <div style="opacity: 0.7; margin-top: 4px;">Content (70%)</div>
+                                        </div>
+                                        <div style="background: rgba(157,78,221,0.15); padding: 20px; border-radius: 12px; text-align: center;">
+                                            <div style="font-size: 36px; font-weight: 700; color: #9D4EDD;">${{r.behavioral_score || 0}}</div>
+                                            <div style="opacity: 0.7; margin-top: 4px;">Behavioral (30%)</div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 12px; margin-bottom: 16px;">
+                                        <h3 style="color: #00FF94; margin-bottom: 8px;">💬 Overall Impression</h3>
+                                        <p>${{r.overall_impression || 'No detailed feedback available.'}}</p>
+                                    </div>
+                                    
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                                        <div style="background: rgba(0,255,148,0.1); padding: 20px; border-radius: 12px;">
+                                            <h3 style="color: #00FF94; margin-bottom: 8px;">💪 Strengths</h3>
+                                            <ul style="padding-left: 20px;">
+                                                ${{(r.strengths || []).map(s => '<li style="margin-bottom: 6px;">' + s + '</li>').join('') || '<li>No data</li>'}}
+                                            </ul>
+                                        </div>
+                                        <div style="background: rgba(255,75,75,0.1); padding: 20px; border-radius: 12px;">
+                                            <h3 style="color: #FF4B4B; margin-bottom: 8px;">📈 Areas to Improve</h3>
+                                            <ul style="padding-left: 20px;">
+                                                ${{(r.areas_for_improvement || []).map(a => '<li style="margin-bottom: 6px;">' + a + '</li>').join('') || '<li>No data</li>'}}
+                                            </ul>
+                                        </div>
+                                    </div>
+                                    
+                                    ${{(r.recommended_next_steps || []).length > 0 ? `
+                                    <div style="background: rgba(0,217,255,0.1); padding: 20px; border-radius: 12px; margin-bottom: 24px;">
+                                        <h3 style="color: #00D9FF; margin-bottom: 8px;">🎯 Next Steps</h3>
+                                        <ul style="padding-left: 20px;">
+                                            ${{r.recommended_next_steps.map(n => '<li style="margin-bottom: 6px;">' + n + '</li>').join('')}}
+                                        </ul>
+                                    </div>` : ''}}
+                                    
+                                    <div style="height: 40px;"></div>
+                                </div>
+                            `;
                             
                             // Send message to parent
                             window.parent.postMessage({{
@@ -1225,18 +1300,27 @@ with tab4:
                 }}
                 
                 function endInterview() {{
-                    if (ws && ws.readyState === WebSocket.OPEN) {{
-                        ws.send(JSON.stringify({{ type: 'end' }}));
-                    }}
+                    updateStatus('Ending interview...', 'processing');
+                    document.getElementById('submitBtn').disabled = true;
                     
-                    // Cleanup
-                    if (recognition) recognition.stop();
+                    // Stop speech recognition and frame capture first
+                    if (recognition) try {{ recognition.stop(); }} catch(e) {{}}
                     if (frameInterval) clearInterval(frameInterval);
-                    if (mediaStream) {{
-                        mediaStream.getTracks().forEach(track => track.stop());
-                    }}
                     
-                    window.parent.postMessage({{ type: 'interview_ended' }}, '*');
+                    if (ws && ws.readyState === WebSocket.OPEN) {{
+                        // Send end message and wait for report via onmessage handler
+                        ws.send(JSON.stringify({{ type: 'end' }}));
+                        
+                        // Show waiting message
+                        document.getElementById('currentQuestion').textContent = '⏳ Generating your interview report... Please wait.';
+                    }} else {{
+                        // WebSocket already closed, just cleanup
+                        if (mediaStream) {{
+                            mediaStream.getTracks().forEach(track => track.stop());
+                        }}
+                        updateStatus('Disconnected', 'error');
+                        document.getElementById('currentQuestion').textContent = '❌ Connection lost. Please try again.';
+                    }}
                 }}
             </script>
         </body>
@@ -1244,7 +1328,7 @@ with tab4:
         """
         
         # Render the interview component
-        components.html(interview_html, height=800, scrolling=False)
+        components.html(interview_html, height=900, scrolling=True)
         
         # Listen for completion message
         st.markdown("---")
@@ -1261,11 +1345,52 @@ with tab4:
     elif st.session_state['voice_interview_mode'] == 'report':
         st.markdown("### 📊 Interview Report")
         
-        st.info("The report will appear here after you complete the interview. If you just finished, the AI is generating your feedback...")
+        report = st.session_state.get('interview_report', None)
         
-        # Placeholder for report - in production, this would be stored in session state
-        # from the WebSocket message
+        if report and 'final_score' in report:
+            # Score cards
+            sc1, sc2, sc3 = st.columns(3)
+            sc1.metric("🏆 Final Score", f"{report.get('final_score', 0)}/100")
+            sc2.metric("📝 Content (70%)", f"{report.get('content_score', 0)}/100")
+            sc3.metric("🎭 Behavioral (30%)", f"{report.get('behavioral_score', 0)}/100")
+            
+            st.divider()
+            
+            # Overall impression
+            if report.get('overall_impression'):
+                st.markdown("#### 💬 Overall Impression")
+                st.info(report['overall_impression'])
+            
+            # Strengths and improvements
+            col_s, col_i = st.columns(2)
+            with col_s:
+                st.markdown("#### 💪 Strengths")
+                for s in report.get('strengths', []):
+                    st.success(f"✅ {s}")
+            with col_i:
+                st.markdown("#### 📈 Areas to Improve")
+                for a in report.get('areas_for_improvement', []):
+                    st.warning(f"🔧 {a}")
+            
+            # Question feedback
+            if report.get('question_feedback'):
+                st.divider()
+                st.markdown("#### 📋 Question-by-Question Feedback")
+                for i, qf in enumerate(report['question_feedback'], 1):
+                    with st.expander(f"Q{i}: {qf.get('question', 'Question')[:80]}..."):
+                        st.metric("Score", f"{qf.get('score', 0)}/100")
+                        st.write(qf.get('feedback', 'No feedback'))
+            
+            # Next steps
+            if report.get('recommended_next_steps'):
+                st.divider()
+                st.markdown("#### 🎯 Recommended Next Steps")
+                for step in report['recommended_next_steps']:
+                    st.write(f"• {step}")
+        else:
+            st.info("The report will appear here after you complete the interview. The scores are displayed inside the interview window when it finishes.")
         
         if st.button("🔄 Start New Interview", type="primary"):
             st.session_state['voice_interview_mode'] = 'setup'
+            st.session_state.pop('interview_report', None)
             st.rerun()
