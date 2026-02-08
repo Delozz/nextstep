@@ -178,25 +178,32 @@ def get_custom_css():
             padding: 12px !important;
         }
         
-        /* Streamlit selectbox specific styling */
+        /* Selectbox - clean base styling */
         div[data-baseweb="select"] > div {
             border-radius: 15px !important;
-            background: rgba(255, 255, 255, 0.05) !important;
-            border: 1px solid rgba(255, 255, 255, 0.1) !important;
         }
         
-        /* Selectbox dropdown arrow container */
         div[data-baseweb="select"] > div > div {
             background: transparent !important;
             border-radius: 15px !important;
         }
         
-        /* Text inside selectbox */
         div[data-baseweb="select"] input,
         div[data-baseweb="select"] div[role="button"] {
             color: #ffffff !important;
             background: transparent !important;
             border: none !important;
+        }
+        
+        /* Hide text input cursor inside all selectboxes */
+        div[data-baseweb="select"] input {
+            width: 0 !important;
+            height: 0 !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            opacity: 0 !important;
+            position: absolute !important;
+            pointer-events: none !important;
         }
         
         /* Number input styling */
@@ -360,6 +367,192 @@ def get_custom_css():
         div[data-testid="stProgress"] > div > div {
             background: linear-gradient(135deg, #00FF94 0%, #00E5FF 100%) !important;
             box-shadow: 0 0 15px rgba(0, 255, 148, 0.5) !important;
+        }
+        
+        /* ============================================
+           ONBOARDING FORM CENTERING
+           ============================================ */
+        .stForm {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+        }
+        
+        .stForm > div {
+            width: 100% !important;
+            max-width: 600px !important;
+        }
+        
+        /* Remove extra borders and boxes from form inputs */
+        .stForm .stTextInput > div,
+        .stForm .stSelectbox > div,
+        .stForm .stNumberInput > div,
+        .stForm .stSlider > div,
+        .stForm .stFileUploader > div {
+            border: none !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+        }
+        
+        /* Style the actual input fields */
+        .stForm .stTextInput input,
+        .stForm .stNumberInput input {
+            width: 100% !important;
+            text-align: center !important;
+        }
+        
+        /* Center selected text inside selectbox */
+        .stSelectbox [data-baseweb="select"] span,
+        .stSelectbox [data-baseweb="select"] div[role="button"] span,
+        .stSelectbox [data-baseweb="select"] > div > div {
+            text-align: center !important;
+            justify-content: center !important;
+        }
+        
+        /* Hide the text input cursor inside selectbox completely */
+        .stSelectbox [data-baseweb="select"] input {
+            width: 0 !important;
+            height: 0 !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            opacity: 0 !important;
+            position: absolute !important;
+            pointer-events: none !important;
+        }
+        
+        /* Center labels */
+        .stForm label {
+            width: 100% !important;
+            text-align: center !important;
+            font-size: 16px !important;
+            font-weight: 600 !important;
+            margin-bottom: 8px !important;
+        }
+        
+        /* ====================================================
+           KILL "Press Enter to submit form" TEXT EVERYWHERE
+           ==================================================== */
+        .stForm [data-testid="InputInstructions"],
+        .stForm .InputInstructions,
+        .stForm div[class*="InputInstructions"],
+        .stForm .stTextInput div:last-child:not([data-baseweb]),
+        .stForm .stNumberInput div[class*="Instructions"],
+        .stForm small,
+        .stForm [data-testid="stCaptionContainer"] {
+            display: none !important;
+            visibility: hidden !important;
+            height: 0 !important;
+            overflow: hidden !important;
+            font-size: 0 !important;
+            line-height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        
+        /* ====================================================
+           CLEAN CENTERED INPUT FIELDS
+           ==================================================== */
+        /* Text input - clean, centered, no extra wrappers */
+        .stForm .stTextInput > div > div {
+            border: none !important;
+            box-shadow: none !important;
+            background: transparent !important;
+        }
+        
+        .stForm .stTextInput input {
+            background: rgba(255, 255, 255, 0.07) !important;
+            border: 1px solid rgba(255, 255, 255, 0.15) !important;
+            border-radius: 15px !important;
+            padding: 14px 20px !important;
+            text-align: center !important;
+            font-size: 16px !important;
+            color: #ffffff !important;
+            transition: border 0.3s ease, box-shadow 0.3s ease !important;
+        }
+        
+        .stForm .stTextInput input:focus {
+            border: 1px solid #00FF94 !important;
+            box-shadow: 0 0 15px rgba(0, 255, 148, 0.25) !important;
+        }
+        
+        /* Number input - clean, centered */
+        .stForm .stNumberInput > div > div {
+            border: none !important;
+            box-shadow: none !important;
+            background: transparent !important;
+        }
+        
+        .stForm .stNumberInput input {
+            background: rgba(255, 255, 255, 0.07) !important;
+            border: 1px solid rgba(255, 255, 255, 0.15) !important;
+            border-radius: 15px !important;
+            padding: 14px 20px !important;
+            text-align: center !important;
+            font-size: 16px !important;
+            color: #ffffff !important;
+            transition: border 0.3s ease, box-shadow 0.3s ease !important;
+        }
+        
+        .stForm .stNumberInput input:focus {
+            border: 1px solid #00FF94 !important;
+            box-shadow: 0 0 15px rgba(0, 255, 148, 0.25) !important;
+        }
+        
+        /* Selectbox - remove all wrapper borders first */
+        .stForm .stSelectbox > div,
+        .stForm .stSelectbox > div > div,
+        .stForm .stSelectbox [data-baseweb="select"],
+        .stForm .stSelectbox [data-baseweb="select"] > div > div {
+            border: none !important;
+            box-shadow: none !important;
+            background: transparent !important;
+            padding: 0 !important;
+        }
+        
+        /* Selectbox - single clean border on the outer select container */
+        .stForm .stSelectbox [data-baseweb="select"] > div {
+            background: rgba(255, 255, 255, 0.07) !important;
+            border: 1px solid rgba(255, 255, 255, 0.15) !important;
+            border-radius: 15px !important;
+            padding: 10px 20px !important;
+            min-height: 48px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            overflow: visible !important;
+            transition: border 0.3s ease, box-shadow 0.3s ease !important;
+        }
+        
+        /* Make sure selected text is fully visible and centered */
+        .stForm .stSelectbox [data-baseweb="select"] span {
+            overflow: visible !important;
+            white-space: nowrap !important;
+            text-overflow: unset !important;
+            font-size: 16px !important;
+        }
+        
+        .stForm .stSelectbox [data-baseweb="select"]:focus-within > div {
+            border: 1px solid #00FF94 !important;
+            box-shadow: 0 0 15px rgba(0, 255, 148, 0.25) !important;
+        }
+        
+        /* Force dropdown to open downwards */
+        .stForm div[data-baseweb="popover"] {
+            top: 100% !important;
+            bottom: auto !important;
+            margin-top: 5px !important;
+            transform: none !important;
+        }
+        
+        div[data-baseweb="popover"] {
+            top: 100% !important;
+            bottom: auto !important;
+        }
+        
+        /* Remove outer container borders in form */
+        .stForm > div > div {
+            background: transparent !important;
+            border: none !important;
         }
         </style>
     """
