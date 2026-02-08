@@ -11,6 +11,29 @@ from src.logic import calculate_taxes, project_savings, calculate_thriving_score
 from src.styles.custom_css import get_custom_css
 from src.viz_factory import load_lottie_url, get_lottie_animations
 
+# --- CACHED MAP DATA PROCESSING ---
+@st.cache_data
+def prepare_map_data(filtered_df, selected_category):
+    """Cache map data processing to prevent reloading on every rerun."""
+    map_data = filtered_df.copy()
+    # Normalize salary for bubble size
+    map_data['Salary_Normalized'] = (map_data['Salary'] / map_data['Salary'].min()) * 50
+    
+    # Create professional hover template
+    map_data['hover_text'] = map_data.apply(
+        lambda row: (
+            f"<b>{row['City']}, {row['State']}</b><br>"
+            f"<b>Annual Salary:</b> ${row['Salary']:,.0f}<br>"
+            f"<b>Monthly Rent:</b> ${row['Rent']:,.0f}<br>"
+            f"<b>Cost of Living Index:</b> {row['COL']}<br>"
+            f"<b>Thriving Score:</b> {int(row['Thriving_Score'])}/100<br>"
+            f"━━━━━━━━━━━━━━━━<br>"
+            f"<b>Rating:</b> {'Excellent' if row['Thriving_Score'] >= 80 else 'Very Good' if row['Thriving_Score'] >= 70 else 'Good' if row['Thriving_Score'] >= 60 else 'Fair' if row['Thriving_Score'] >= 50 else 'Challenging'}"
+        ),
+        axis=1
+    )
+    return map_data
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -252,7 +275,7 @@ col3.metric("💼 Average Salary", f"${avg_salary:,.0f}", "For this role")
 st.divider()
 
 # --- TABBED INTERFACE ---
-tab1, tab2, tab3 = st.tabs(["Map View", "Budget Lab", "Resume Pivot"])
+tab1, tab2, tab3, tab4 = st.tabs(["Map View", "Budget Lab", "Resume Pivot", "🎤 Simulate Interview"])
 
 # If AI just finished, inject JS to click the Resume Pivot tab
 if st.session_state.get('switch_to_resume_tab', False):
@@ -265,12 +288,19 @@ if st.session_state.get('switch_to_resume_tab', False):
     """, height=0)
     st.toast('🤖 AI Analysis Complete! Results are in the Resume Pivot tab.', icon='✅')
 
+# Auto-switch to interview tab if flagged
+if st.session_state.get('switch_to_interview_tab', False):
+    st.session_state['switch_to_interview_tab'] = False
+    components.html("""
+        <script>
+            const tabs = window.parent.document.querySelectorAll('button[data-baseweb="tab"]');
+            if (tabs.length >= 4) { tabs[3].click(); }
+        </script>
+    """, height=0)
+
 # ========== TAB 1: MAP VIEW ==========
 with tab1:
     st.subheader(f"Where can a {selected_category} thrive?")
-
-    # Use filtered data (we already checked it's not empty earlier)
-    map_data = filtered_data.copy()
 
     # Get top city from filtered data
     top_row = filtered_data.loc[filtered_data['Salary'].idxmax()]
@@ -290,23 +320,14 @@ with tab1:
 
     st.divider()
 
-    # Scatter Mapbox with dark mode
-    # Normalize salary for bubble size (make high salaries REALLY pop)
-    map_data['Salary_Normalized'] = (map_data['Salary'] / map_data['Salary'].min()) * 50
+    # Use cached map data processing for better performance
+    map_data = prepare_map_data(filtered_data, selected_category)
 
-    # Create professional hover template
-    map_data['hover_text'] = map_data.apply(
-        lambda row: (
-            f"<b>{row['City']}, {row['State']}</b><br>"
-            f"<b>Annual Salary:</b> ${row['Salary']:,.0f}<br>"
-            f"<b>Monthly Rent:</b> ${row['Rent']:,.0f}<br>"
-            f"<b>Cost of Living Index:</b> {row['COL']}<br>"
-            f"<b>Thriving Score:</b> {int(row['Thriving_Score'])}/100<br>"
-            f"━━━━━━━━━━━━━━━━<br>"
-            f"<b>Rating:</b> {'Excellent' if row['Thriving_Score'] >= 80 else 'Very Good' if row['Thriving_Score'] >= 70 else 'Good' if row['Thriving_Score'] >= 60 else 'Fair' if row['Thriving_Score'] >= 50 else 'Challenging'}"
-        ),
-        axis=1
-    )
+    # Initialize map state for preserving zoom/center
+    if 'map_zoom' not in st.session_state:
+        st.session_state['map_zoom'] = 3
+    if 'map_center' not in st.session_state:
+        st.session_state['map_center'] = {"lat": 37.0902, "lon": -95.7129}
 
     fig_map = px.scatter_mapbox(
         map_data,
@@ -317,8 +338,8 @@ with tab1:
         hover_name="City",
         color_continuous_scale="RdYlGn",
         size_max=45,
-        zoom=3,
-        center={"lat": 37.0902, "lon": -95.7129},
+        zoom=st.session_state['map_zoom'],
+        center=st.session_state['map_center'],
         mapbox_style="carto-darkmatter",
         title=f"<b>{selected_category}</b> Opportunities Across the US",
         custom_data=['hover_text']
@@ -330,10 +351,12 @@ with tab1:
         marker=dict(opacity=0.8)
     )
 
+    # Force consistent dark theme regardless of browser settings
     fig_map.update_layout(
-        height=700,
-        paper_bgcolor='rgba(10, 14, 39, 0.95)',
-        plot_bgcolor='rgba(10, 14, 39, 0.95)',
+        height=600,
+        autosize=True,
+        paper_bgcolor='#0a0e27',
+        plot_bgcolor='#0a0e27',
         font=dict(color='#00FF94', family='Courier New, monospace', size=14),
         title=dict(
             font=dict(size=20, color='#00FF94', family='Courier New, monospace'),
@@ -346,15 +369,27 @@ with tab1:
                 font=dict(color='#00FF94', size=12)
             ),
             tickfont=dict(color='#00FF94'),
-            bgcolor='rgba(255, 255, 255, 0.05)',
+            bgcolor='rgba(10, 14, 39, 0.95)',
             bordercolor='#00FF94',
             borderwidth=2,
             len=0.7
         ),
-        margin=dict(l=0, r=0, t=50, b=0)
+        margin=dict(l=10, r=10, t=50, b=10),
+        # Force dark theme settings
+        template='plotly_dark',
+        mapbox=dict(
+            style='carto-darkmatter',
+            zoom=st.session_state['map_zoom'],
+            center=st.session_state['map_center']
+        )
     )
 
-    st.plotly_chart(fig_map, use_container_width=True)
+    # Render map with responsive container
+    st.plotly_chart(fig_map, use_container_width=True, config={
+        'displayModeBar': True,
+        'scrollZoom': True,
+        'responsive': True
+    })
 
     with st.expander("See the math behind your score"):
         st.write(f"Based on a {lifestyle} lifestyle with ${debt:,} in debt...")
@@ -408,12 +443,12 @@ with tab2:
     }
     lifestyle_cost = lifestyle_costs.get(lifestyle, 1700)
 
-    left_col, right_col = st.columns([1, 1])
-
-    # Left Column: Donut Chart
-    with left_col:
-        st.markdown("### Monthly Budget Breakdown")
-
+    # Centered Pie Chart Layout
+    st.markdown("### Monthly Budget Breakdown")
+    
+    _, chart_col, _ = st.columns([1, 2, 1])
+    
+    with chart_col:
         # Real budget data based on calculations
         budget_data = {
             'Category': ['Rent', 'Taxes', 'Loans', 'Lifestyle', 'Savings'],
@@ -455,47 +490,28 @@ with tab2:
 
         st.plotly_chart(fig_donut, use_container_width=True)
 
-        # Dynamic insight sentence
-        if monthly_savings > 0:
-            st.success(f"💰 In **{target_city}**, your Wealth Velocity is **${monthly_savings:,.2f}/mo** - Building your empire!")
-        else:
-            st.error(f"⚠️ In **{target_city}**, Burn Rate exceeds income by **${abs(monthly_savings):,.2f}/mo** with {lifestyle} lifestyle.")
+    # Dynamic insight sentence (centered)
+    if monthly_savings > 0:
+        st.success(f"💰 In **{target_city}**, your Wealth Velocity is **${monthly_savings:,.2f}/mo** - Building your empire!")
+    else:
+        st.error(f"⚠️ In **{target_city}**, Burn Rate exceeds income by **${abs(monthly_savings):,.2f}/mo** with {lifestyle} lifestyle.")
 
-    # Right Column: Success Checklist & Updated Metrics (POST-GAME STATS)
-    with right_col:
-        st.markdown("### 📊 Post-Game Financial Stats")
+    st.divider()
 
-        # Display key metrics
-        col_a, col_b = st.columns(2)
-        with col_a:
-            st.metric("💵 Net Income", f"${monthly_net:,.0f}/mo", "After taxes")
-            st.metric("🔥 Burn Rate", f"${city_rent:,.0f}/mo", "Housing cost")
-        with col_b:
-            st.metric("💰 Wealth Velocity", f"${monthly_savings:,.0f}/mo",
-                      "💰" if monthly_savings > 1000 else ("⚠️" if monthly_savings < 0 else "📊"))
-            st.metric("📈 Annual Projection", f"${monthly_savings * 12:,.0f}/yr", "If consistent")
+    # Financial Stats Section
+    st.markdown("### 📊 Post-Game Financial Stats")
 
-        # Progress bar for Wealth Velocity (cap at $5,000)
-        st.markdown("#### 🎯 Financial Freedom Progress")
-        if monthly_savings > 0:
-            wealth_progress = min(monthly_savings / 5000, 1.0)
-            st.progress(wealth_progress, text=f"Wealth Building: {int(wealth_progress * 100)}% to Elite Status")
-        else:
-            st.progress(0, text="Wealth Building: Negative Cash Flow")
+    col_a, col_b, col_c, col_d = st.columns(4)
+    with col_a:
+        st.metric("💵 Net Income", f"${monthly_net:,.0f}/mo", "After taxes")
+    with col_b:
+        st.metric("🔥 Burn Rate", f"${city_rent:,.0f}/mo", "Housing cost")
+    with col_c:
+        st.metric("💰 Wealth Velocity", f"${monthly_savings:,.0f}/mo",
+                  "💰" if monthly_savings > 1000 else ("⚠️" if monthly_savings < 0 else "📊"))
+    with col_d:
+        st.metric("📈 Annual Projection", f"${monthly_savings * 12:,.0f}/yr", "If consistent")
 
-        st.divider()
-
-        st.markdown("### 🏆 Achievement Tracker")
-        st.markdown("Unlock your financial milestones:")
-
-        st.checkbox("✅ Emergency Fund Built (3-6 months)", value=False)
-        st.checkbox("✅ 401k Maxed ($23,000/year)", value=False)
-        st.checkbox("✅ High-Interest Debt Paid Off", value=True)
-        st.checkbox("✅ Credit Score Above 750", value=True)
-        st.checkbox("✅ Side Income Stream Active", value=False)
-        st.checkbox("✅ Monthly Budget Tracked", value=True)
-        st.checkbox("✅ Investment Portfolio Started", value=False)
-        st.checkbox("✅ Health Insurance Secured", value=True)
 
 
 # ========== TAB 3: RESUME PIVOT ==========
@@ -661,3 +677,595 @@ with tab3:
             st.caption(f"Top skills for {selected_category}:")
             for keyword in relevant_keywords[:6]:  # Show first 6
                 st.markdown(f"<div style='background-color: #1E2130; padding: 6px 12px; margin: 4px 0; border-radius: 5px; display: inline-block;'>🔹 {keyword}</div>", unsafe_allow_html=True)
+
+# ========== TAB 4: SIMULATE INTERVIEW ==========
+with tab4:
+    st.subheader("🎤 AI Mock Interview Practice")
+    
+    # Interview mode selector
+    if 'voice_interview_mode' not in st.session_state:
+        st.session_state['voice_interview_mode'] = 'setup'  # setup, active, report
+    
+    if st.session_state['voice_interview_mode'] == 'setup':
+        st.markdown("""
+            <div style='background: linear-gradient(135deg, #9D4EDD 0%, #00D9FF 100%); 
+                        padding: 20px; border-radius: 12px; margin-bottom: 20px;'>
+                <h3 style='color: white; margin: 0;'>🎥 Voice + Video Interview</h3>
+                <p style='color: rgba(255,255,255,0.9); margin: 5px 0 0 0;'>
+                    Real-time AI interview with camera and microphone
+                </p>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        col_setup, col_info = st.columns([2, 1])
+        
+        with col_setup:
+            st.markdown("### 📋 Interview Setup")
+            st.info(f"**Target Role:** {selected_category}")
+            st.caption(f"**Candidate:** {user_name}")
+            
+            st.markdown("#### ⚠️ Before Starting:")
+            st.markdown("""
+            1. **Allow camera & microphone** when prompted
+            2. **Speak clearly** into your microphone
+            3. Interview ends after **5 questions**
+            4. You'll receive a **70/30 scored report**
+            """)
+        
+        with col_info:
+            st.markdown("### 📊 Scoring System")
+            st.markdown("""
+            <div style='background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px;'>
+                <p><strong style='color: #00FF94;'>70%</strong> Content Quality</p>
+                <p style='font-size: 12px; opacity: 0.7;'>Logic, relevance, depth of answers</p>
+                <p style='margin-top: 10px;'><strong style='color: #00D9FF;'>30%</strong> Behavioral</p>
+                <p style='font-size: 12px; opacity: 0.7;'>Eye contact, confidence, body language</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        st.divider()
+        
+        # Check if server is needed
+        st.warning("📢 **Make sure the interview server is running:** `uvicorn src.interview.server:app --reload --port 8000`")
+        
+        if st.button("🚀 Start Voice Interview", type="primary", use_container_width=True):
+            st.session_state['voice_interview_mode'] = 'active'
+            st.rerun()
+    
+    elif st.session_state['voice_interview_mode'] == 'active':
+        # Full embedded interview component with camera, mic, and WebSocket
+        interview_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+                body {{ 
+                    font-family: 'Inter', -apple-system, sans-serif; 
+                    background: transparent;
+                    color: white;
+                }}
+                .interview-container {{
+                    background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
+                    border-radius: 16px;
+                    padding: 24px;
+                    min-height: 700px;
+                }}
+                .header {{
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 20px;
+                }}
+                .status {{
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    padding: 8px 16px;
+                    background: rgba(255,255,255,0.1);
+                    border-radius: 20px;
+                    font-size: 14px;
+                }}
+                .status-dot {{
+                    width: 10px;
+                    height: 10px;
+                    border-radius: 50%;
+                    animation: pulse 1.5s infinite;
+                }}
+                .status-dot.connecting {{ background: #FFD700; }}
+                .status-dot.active {{ background: #00FF94; }}
+                .status-dot.processing {{ background: #00D9FF; animation: pulse 0.5s infinite; }}
+                .status-dot.error {{ background: #FF4B4B; }}
+                @keyframes pulse {{
+                    0%, 100% {{ opacity: 1; }}
+                    50% {{ opacity: 0.5; }}
+                }}
+                .main-content {{
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 20px;
+                }}
+                .video-section {{
+                    background: #000;
+                    border-radius: 12px;
+                    overflow: hidden;
+                    position: relative;
+                    aspect-ratio: 4/3;
+                }}
+                #localVideo {{
+                    width: 100%;
+                    height: 100%;
+                    object-fit: cover;
+                    transform: scaleX(-1);
+                }}
+                .video-overlay {{
+                    position: absolute;
+                    bottom: 10px;
+                    left: 10px;
+                    background: rgba(0,0,0,0.7);
+                    padding: 6px 12px;
+                    border-radius: 6px;
+                    font-size: 12px;
+                }}
+                .chat-section {{
+                    display: flex;
+                    flex-direction: column;
+                    gap: 16px;
+                }}
+                .question-box {{
+                    background: rgba(0, 255, 148, 0.1);
+                    border-left: 4px solid #00FF94;
+                    padding: 20px;
+                    border-radius: 0 12px 12px 0;
+                    min-height: 120px;
+                }}
+                .question-label {{
+                    opacity: 0.7;
+                    font-size: 14px;
+                    margin-bottom: 8px;
+                }}
+                .question-text {{
+                    font-size: 18px;
+                    line-height: 1.5;
+                }}
+                .transcript-box {{
+                    background: rgba(255,255,255,0.05);
+                    border-radius: 12px;
+                    padding: 16px;
+                    flex: 1;
+                    min-height: 150px;
+                    max-height: 200px;
+                    overflow-y: auto;
+                }}
+                .transcript-label {{
+                    opacity: 0.7;
+                    font-size: 14px;
+                    margin-bottom: 8px;
+                }}
+                .controls {{
+                    display: flex;
+                    gap: 12px;
+                    margin-top: 20px;
+                }}
+                .btn {{
+                    padding: 12px 24px;
+                    border: none;
+                    border-radius: 8px;
+                    font-size: 16px;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                }}
+                .btn-primary {{
+                    background: linear-gradient(135deg, #00FF94 0%, #00D9FF 100%);
+                    color: #0a0e27;
+                    font-weight: 600;
+                }}
+                .btn-danger {{
+                    background: #FF4B4B;
+                    color: white;
+                }}
+                .btn:hover {{ transform: scale(1.02); }}
+                .btn:disabled {{
+                    opacity: 0.5;
+                    cursor: not-allowed;
+                    transform: none;
+                }}
+                .audio-level {{
+                    height: 6px;
+                    background: rgba(255,255,255,0.1);
+                    border-radius: 3px;
+                    margin-top: 12px;
+                    overflow: hidden;
+                }}
+                .audio-level-bar {{
+                    height: 100%;
+                    background: linear-gradient(90deg, #00FF94, #00D9FF);
+                    width: 0%;
+                    transition: width 0.1s;
+                }}
+                .progress-bar {{
+                    height: 4px;
+                    background: rgba(255,255,255,0.1);
+                    border-radius: 2px;
+                    margin-bottom: 20px;
+                }}
+                .progress-fill {{
+                    height: 100%;
+                    background: linear-gradient(90deg, #9D4EDD, #00D9FF);
+                    border-radius: 2px;
+                    transition: width 0.3s;
+                }}
+                .error-message {{
+                    background: rgba(255,75,75,0.2);
+                    border: 1px solid #FF4B4B;
+                    padding: 12px;
+                    border-radius: 8px;
+                    margin-top: 12px;
+                }}
+                .permission-prompt {{
+                    text-align: center;
+                    padding: 40px;
+                }}
+                .permission-prompt h3 {{
+                    margin-bottom: 16px;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="interview-container">
+                <div class="header">
+                    <h2>🎤 Mock Interview: {selected_category}</h2>
+                    <div class="status">
+                        <div class="status-dot connecting" id="statusDot"></div>
+                        <span id="statusText">Connecting...</span>
+                    </div>
+                </div>
+                
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                </div>
+                
+                <div id="permissionPrompt" class="permission-prompt">
+                    <h3>📷 Camera & Microphone Access Required</h3>
+                    <p style="opacity: 0.7; margin-bottom: 20px;">Click Start to allow access and begin your interview</p>
+                    <button class="btn btn-primary" onclick="initializeMedia()">
+                        🚀 Start Interview
+                    </button>
+                </div>
+                
+                <div id="mainContent" class="main-content" style="display: none;">
+                    <div class="video-section">
+                        <video id="localVideo" autoplay muted playsinline></video>
+                        <div class="video-overlay">
+                            <span id="turnIndicator">🎤 Listening...</span>
+                        </div>
+                    </div>
+                    
+                    <div class="chat-section">
+                        <div class="question-box">
+                            <div class="question-label">🤖 Interviewer:</div>
+                            <div class="question-text" id="currentQuestion">Waiting for first question...</div>
+                        </div>
+                        
+                        <div class="transcript-box">
+                            <div class="transcript-label">📝 Your Response:</div>
+                            <div id="transcript">Start speaking when ready...</div>
+                        </div>
+                        
+                        <div class="audio-level">
+                            <div class="audio-level-bar" id="audioLevel"></div>
+                        </div>
+                        
+                        <div class="controls">
+                            <button class="btn btn-primary" id="submitBtn" onclick="submitAnswer()" disabled>
+                                ✅ Submit Answer
+                            </button>
+                            <button class="btn btn-danger" onclick="endInterview()">
+                                🛑 End Interview
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="errorBox" class="error-message" style="display: none;"></div>
+            </div>
+            
+            <script>
+                const WS_URL = 'ws://localhost:8000/ws/interview/';
+                const TARGET_ROLE = '{selected_category}';
+                const USER_NAME = '{user_name}';
+                
+                let ws = null;
+                let sessionId = null;
+                let mediaStream = null;
+                let recognition = null;
+                let transcript = '';
+                let turnNumber = 0;
+                let totalTurns = 5;
+                let audioContext = null;
+                let analyser = null;
+                let videoFrames = [];
+                let frameInterval = null;
+                
+                function updateStatus(status, color) {{
+                    document.getElementById('statusDot').className = 'status-dot ' + color;
+                    document.getElementById('statusText').textContent = status;
+                }}
+                
+                function showError(message) {{
+                    const errorBox = document.getElementById('errorBox');
+                    errorBox.style.display = 'block';
+                    errorBox.textContent = '❌ ' + message;
+                }}
+                
+                async function initializeMedia() {{
+                    try {{
+                        updateStatus('Requesting permissions...', 'connecting');
+                        
+                        // Request camera and microphone
+                        mediaStream = await navigator.mediaDevices.getUserMedia({{
+                            video: {{ width: 640, height: 480, facingMode: 'user' }},
+                            audio: {{ sampleRate: 16000, channelCount: 1 }}
+                        }});
+                        
+                        // Show video
+                        const video = document.getElementById('localVideo');
+                        video.srcObject = mediaStream;
+                        
+                        // Hide permission prompt, show main content
+                        document.getElementById('permissionPrompt').style.display = 'none';
+                        document.getElementById('mainContent').style.display = 'grid';
+                        
+                        // Setup audio level visualization
+                        setupAudioVisualization();
+                        
+                        // Setup speech recognition
+                        setupSpeechRecognition();
+                        
+                        // Start frame capture (1 FPS for behavioral analysis)
+                        startFrameCapture();
+                        
+                        // Create session and connect WebSocket
+                        await createSession();
+                        
+                    }} catch (error) {{
+                        console.error('Media error:', error);
+                        showError('Failed to access camera/microphone: ' + error.message);
+                        updateStatus('Permission denied', 'error');
+                    }}
+                }}
+                
+                function setupAudioVisualization() {{
+                    audioContext = new AudioContext();
+                    const source = audioContext.createMediaStreamSource(mediaStream);
+                    analyser = audioContext.createAnalyser();
+                    analyser.fftSize = 256;
+                    source.connect(analyser);
+                    
+                    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+                    
+                    function updateLevel() {{
+                        analyser.getByteFrequencyData(dataArray);
+                        const avg = dataArray.reduce((a, b) => a + b) / dataArray.length;
+                        const level = Math.min(100, avg * 1.5);
+                        document.getElementById('audioLevel').style.width = level + '%';
+                        requestAnimationFrame(updateLevel);
+                    }}
+                    updateLevel();
+                }}
+                
+                function setupSpeechRecognition() {{
+                    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {{
+                        showError('Speech recognition not supported. Please use Chrome.');
+                        return;
+                    }}
+                    
+                    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                    recognition = new SpeechRecognition();
+                    recognition.continuous = true;
+                    recognition.interimResults = true;
+                    recognition.lang = 'en-US';
+                    
+                    recognition.onresult = (event) => {{
+                        let interimTranscript = '';
+                        let finalTranscript = '';
+                        
+                        for (let i = event.resultIndex; i < event.results.length; i++) {{
+                            if (event.results[i].isFinal) {{
+                                finalTranscript += event.results[i][0].transcript + ' ';
+                            }} else {{
+                                interimTranscript += event.results[i][0].transcript;
+                            }}
+                        }}
+                        
+                        transcript += finalTranscript;
+                        document.getElementById('transcript').textContent = transcript + interimTranscript;
+                        document.getElementById('submitBtn').disabled = transcript.trim().length < 10;
+                    }};
+                    
+                    recognition.onerror = (event) => {{
+                        console.error('Speech error:', event.error);
+                        if (event.error !== 'no-speech') {{
+                            showError('Speech recognition error: ' + event.error);
+                        }}
+                    }};
+                    
+                    recognition.onend = () => {{
+                        // Restart recognition if interview is still active
+                        if (ws && ws.readyState === WebSocket.OPEN) {{
+                            try {{ recognition.start(); }} catch(e) {{}}
+                        }}
+                    }};
+                }}
+                
+                function startFrameCapture() {{
+                    const video = document.getElementById('localVideo');
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 320;
+                    canvas.height = 240;
+                    const ctx = canvas.getContext('2d');
+                    
+                    frameInterval = setInterval(() => {{
+                        ctx.drawImage(video, 0, 0, 320, 240);
+                        const frame = canvas.toDataURL('image/jpeg', 0.5).split(',')[1];
+                        videoFrames.push(frame);
+                        // Keep only last 10 frames
+                        if (videoFrames.length > 10) videoFrames.shift();
+                    }}, 1000);
+                }}
+                
+                async function createSession() {{
+                    try {{
+                        updateStatus('Creating session...', 'connecting');
+                        
+                        const response = await fetch('http://localhost:8000/session/create', {{
+                            method: 'POST',
+                            headers: {{ 'Content-Type': 'application/json' }},
+                            body: JSON.stringify({{
+                                target_role: TARGET_ROLE,
+                                user_name: USER_NAME
+                            }})
+                        }});
+                        
+                        if (!response.ok) {{
+                            throw new Error('Server returned ' + response.status);
+                        }}
+                        
+                        const data = await response.json();
+                        sessionId = data.session_id;
+                        
+                        // Connect WebSocket
+                        connectWebSocket();
+                        
+                    }} catch (error) {{
+                        console.error('Session error:', error);
+                        showError('Failed to connect to server. Is it running on port 8000?');
+                        updateStatus('Connection failed', 'error');
+                    }}
+                }}
+                
+                function connectWebSocket() {{
+                    ws = new WebSocket(WS_URL + sessionId);
+                    
+                    ws.onopen = () => {{
+                        updateStatus('Connected', 'active');
+                        // Start interview
+                        ws.send(JSON.stringify({{ type: 'start' }}));
+                        // Start speech recognition
+                        try {{ recognition.start(); }} catch(e) {{}}
+                    }};
+                    
+                    ws.onmessage = (event) => {{
+                        const data = JSON.parse(event.data);
+                        
+                        if (data.type === 'question') {{
+                            document.getElementById('currentQuestion').textContent = data.text;
+                            turnNumber = data.turn_number || turnNumber + 1;
+                            document.getElementById('progressFill').style.width = ((turnNumber / totalTurns) * 100) + '%';
+                            document.getElementById('turnIndicator').textContent = '🎤 Question ' + turnNumber + '/' + totalTurns;
+                            updateStatus('Listening...', 'active');
+                            
+                            // Clear transcript for new question
+                            transcript = '';
+                            document.getElementById('transcript').textContent = 'Start speaking...';
+                            document.getElementById('submitBtn').disabled = true;
+                            
+                            if (data.is_final) {{
+                                // Interview complete
+                                updateStatus('Interview complete!', 'processing');
+                            }}
+                        }}
+                        
+                        if (data.type === 'report') {{
+                            // Store report and signal completion
+                            window.interviewReport = data.data;
+                            updateStatus('Report ready!', 'active');
+                            document.getElementById('currentQuestion').textContent = '✅ Interview Complete! Close this window to see your report.';
+                            document.getElementById('submitBtn').style.display = 'none';
+                            
+                            // Send message to parent
+                            window.parent.postMessage({{
+                                type: 'interview_complete',
+                                report: data.data
+                            }}, '*');
+                        }}
+                        
+                        if (data.type === 'error') {{
+                            showError(data.message);
+                        }}
+                    }};
+                    
+                    ws.onerror = (error) => {{
+                        console.error('WebSocket error:', error);
+                        showError('WebSocket connection error');
+                        updateStatus('Error', 'error');
+                    }};
+                    
+                    ws.onclose = () => {{
+                        updateStatus('Disconnected', 'error');
+                        if (recognition) recognition.stop();
+                    }};
+                }}
+                
+                function submitAnswer() {{
+                    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+                    if (transcript.trim().length < 10) return;
+                    
+                    updateStatus('Processing...', 'processing');
+                    document.getElementById('submitBtn').disabled = true;
+                    document.getElementById('turnIndicator').textContent = '⏳ Processing...';
+                    
+                    ws.send(JSON.stringify({{
+                        type: 'turn',
+                        transcript: transcript,
+                        video_frames: videoFrames
+                    }}));
+                    
+                    videoFrames = [];
+                }}
+                
+                function endInterview() {{
+                    if (ws && ws.readyState === WebSocket.OPEN) {{
+                        ws.send(JSON.stringify({{ type: 'end' }}));
+                    }}
+                    
+                    // Cleanup
+                    if (recognition) recognition.stop();
+                    if (frameInterval) clearInterval(frameInterval);
+                    if (mediaStream) {{
+                        mediaStream.getTracks().forEach(track => track.stop());
+                    }}
+                    
+                    window.parent.postMessage({{ type: 'interview_ended' }}, '*');
+                }}
+            </script>
+        </body>
+        </html>
+        """
+        
+        # Render the interview component
+        components.html(interview_html, height=800, scrolling=False)
+        
+        # Listen for completion message
+        st.markdown("---")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🔙 Back to Setup"):
+                st.session_state['voice_interview_mode'] = 'setup'
+                st.rerun()
+        with col2:
+            if st.button("📊 View Report (when complete)"):
+                st.session_state['voice_interview_mode'] = 'report'
+                st.rerun()
+    
+    elif st.session_state['voice_interview_mode'] == 'report':
+        st.markdown("### 📊 Interview Report")
+        
+        st.info("The report will appear here after you complete the interview. If you just finished, the AI is generating your feedback...")
+        
+        # Placeholder for report - in production, this would be stored in session state
+        # from the WebSocket message
+        
+        if st.button("🔄 Start New Interview", type="primary"):
+            st.session_state['voice_interview_mode'] = 'setup'
+            st.rerun()

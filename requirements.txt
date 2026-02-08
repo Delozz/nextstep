@@ -6,7 +6,11 @@ plotly
 joblib
 PyPDF2
 pypdf
-google-generativeai
+google-genai
 python-dotenv
 streamlit-lottie
 requests
+# Interview feature dependencies
+fastapi
+uvicorn[standard]
+websockets
