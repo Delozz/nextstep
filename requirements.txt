@@ -8,3 +8,5 @@ PyPDF2
 pypdf
 google-generativeai
 python-dotenv
+streamlit-lottie
+requests

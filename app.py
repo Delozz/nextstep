@@ -1,11 +1,15 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import os
 from dotenv import load_dotenv
+from streamlit_lottie import st_lottie
 from src.loader import load_all_salaries
 from src.logic import calculate_taxes, project_savings, calculate_thriving_score, format_currency
+from src.styles.custom_css import get_custom_css
+from src.viz_factory import load_lottie_url, get_lottie_animations
 
 # Load environment variables from .env file
 load_dotenv()
@@ -23,43 +27,14 @@ except Exception as e:
     st.error(f"❌ Failed to load data: {e}")
     st.stop()
 
-# --- CUSTOM STYLING FUNCTION ---
-def style_metric_cards():
-    """Inject CSS to style metric cards with modern SaaS look"""
-    st.markdown("""
-        <style>
-        .stApp { background-color: #0E1117; color: white; }
-        div.stButton > button { background-color: #FF4B4B; color: white; border-radius: 10px; }
-        
-        /* Metric Card Styling */
-        div[data-testid="stMetricValue"] { 
-            font-size: 50px; 
-        }
-        div[data-testid="stMetric"] {
-            background-color: #1E2130;
-            padding: 20px;
-            border-radius: 10px;
-            border: 1px solid #2E3440;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-        }
-        
-        /* Tab Styling */
-        .stTabs [data-baseweb="tab-list"] {
-            gap: 8px;
-        }
-        .stTabs [data-baseweb="tab"] {
-            background-color: #1E2130;
-            border-radius: 8px;
-            padding: 10px 20px;
-        }
-        .stTabs [aria-selected="true"] {
-            background-color: #FF4B4B;
-        }
-        </style>
-        """, unsafe_allow_html=True)
+# --- APPLY CUSTOM CYBERPUNK/PREMIUM THEME ---
+st.markdown(get_custom_css(), unsafe_allow_html=True)
 
-# Apply custom styling
-style_metric_cards()
+# --- LOAD LOTTIE ANIMATIONS (cached) ---
+if 'lottie_loaded' not in st.session_state:
+    lottie_animations = get_lottie_animations()
+    st.session_state['robot_animation'] = load_lottie_url(lottie_animations['ai_brain'])
+    st.session_state['lottie_loaded'] = True
 
 # --- SIDEBAR: USER INPUTS ---
 with st.sidebar:
@@ -75,34 +50,65 @@ with st.sidebar:
     
     st.divider()
     
-    uploaded_file = st.file_uploader("Upload Resume (PDF)", type="pdf")
+    st.markdown("<h3 style='text-align: center; color: #00FF94;'>📄 Upload Your Resume</h3>", unsafe_allow_html=True)
+    
+    # Use empty placeholder for stable rendering
+    animation_placeholder = st.empty()
+    
+    # Only show animation if not processing
+    if not st.session_state.get('is_processing', False):
+        with animation_placeholder.container():
+            if st.session_state.get('robot_animation'):
+                st_lottie(st.session_state['robot_animation'], height=150, key="robot_anim")
+    
+    uploaded_file = st.file_uploader("", type="pdf", label_visibility="collapsed")
     
     if st.button("Calculate Future"):
-        st.session_state['selected_category'] = selected_category
         st.session_state['calculate_clicked'] = True
-        st.session_state['show_results'] = False  # Will be set to True after AI completes
         
-        # If resume is uploaded, trigger AI analysis
         if uploaded_file is not None:
-            with st.spinner("🤖 AI is analyzing your resume..."):
-                try:
-                    from src.resume_parser import parse_resume_with_ai
-                    
-                    api_key = os.getenv('GEMINI_API_KEY')
-                    if not api_key:
-                        st.warning("⚠️ API key not found. Resume analysis will be limited.")
-                        st.session_state['ai_results'] = None
-                    else:
-                        # Run AI analysis
-                        ai_results = parse_resume_with_ai(uploaded_file, api_key)
-                        st.session_state['ai_results'] = ai_results
-                        st.session_state['show_results'] = True
-                except Exception as e:
-                    st.error(f"❌ AI Analysis failed: {e}")
+            # Don't set is_processing flag - just do the work
+            # Show custom loading screen
+            loading_placeholder = st.empty()
+            with loading_placeholder.container():
+                st.markdown("""
+                    <div style='text-align: center; padding: 50px; background: rgba(255,255,255,0.05); border-radius: 15px; margin: 20px 0;'>
+                        <div style='display: inline-block; width: 60px; height: 60px; border: 6px solid rgba(0,255,148,0.2); 
+                                    border-top-color: #00FF94; border-radius: 50%; animation: spin 1s linear infinite;'></div>
+                        <h2 style='color: #00FF94; margin-top: 20px;'>🤖 AI Analyzing Resume...</h2>
+                        <p style='color: rgba(255,255,255,0.7);'>Extracting skills and insights</p>
+                    </div>
+                    <style>
+                        @keyframes spin {
+                            to { transform: rotate(360deg); }
+                        }
+                    </style>
+                """, unsafe_allow_html=True)
+            
+            try:
+                from src.resume_parser import parse_resume_with_ai
+                
+                api_key = os.getenv('GEMINI_API_KEY')
+                if not api_key:
+                    loading_placeholder.empty()
+                    st.warning("⚠️ API key not found.")
                     st.session_state['ai_results'] = None
+                else:
+                    ai_results = parse_resume_with_ai(uploaded_file, api_key)
+                    st.session_state['ai_results'] = ai_results
+                    loading_placeholder.empty()
+                    st.success("✅ AI Analysis Complete!")
+            except Exception as e:
+                loading_placeholder.empty()
+                st.error(f"❌ AI Analysis failed: {e}")
+                st.session_state['ai_results'] = None
+            
+            # Flag to switch to Resume Pivot tab after rerun
+            st.session_state['switch_to_resume_tab'] = True
         else:
             st.session_state['ai_results'] = None
-            st.session_state['show_results'] = True
+        
+        st.rerun()
 
 # --- FILTER DATA BASED ON SELECTION ---
 filtered_data = df[df['Category'] == selected_category].copy()
@@ -132,7 +138,7 @@ avg_salary = filtered_data['Salary'].mean()
 # For display purposes
 data_for_display = filtered_data
 
-# --- KEY METRICS ROW ---
+# --- KEY METRICS ROW (POST-GAME STATS SCREEN) ---
 # Calculate real savings for the top recommended city
 top_city_net = calculate_taxes(top_city_row['Salary'], top_city_row['State'])
 top_city_savings = project_savings(top_city_net, top_city_row['Rent'], top_city_row['COL'], lifestyle)
@@ -140,91 +146,34 @@ top_city_savings -= ((debt / 10000) * 115 if debt > 0 else 0)  # Subtract loan p
 
 col1, col2, col3 = st.columns(3)
 col1.metric("🎯 Best City for You", top_city, f"Score: {top_score}/100")
-col2.metric("Your Monthly Savings", f"${top_city_savings:,.0f}", f"in {top_city}")
-col3.metric("Average Salary", f"${avg_salary:,.0f}", "For this role")
 
-# --- RESULTS POPUP (if Calculate Future was clicked) ---
-if st.session_state.get('show_results', False):
-    st.balloons()  # Celebration effect!
-    
-    # Create a prominent results card
-    st.markdown("""
-        <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                    padding: 30px; border-radius: 15px; margin: 20px 0;
-                    box-shadow: 0 10px 30px rgba(0,0,0,0.3);'>
-            <h2 style='color: white; text-align: center; margin: 0;'>🎉 Your Future is Calculated!</h2>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    # Display key insights in a nice grid
-    insight_col1, insight_col2, insight_col3 = st.columns(3)
-    
-    with insight_col1:
-        st.markdown("""
-            <div style='background-color: #1E2130; padding: 20px; border-radius: 10px; text-align: center;'>
-                <h3 style='color: #00ff88; margin: 0;'>✅ Analysis Complete</h3>
-                <p style='color: #888; margin: 5px 0;'>Career path analyzed</p>
-                <p style='font-size: 24px; color: white; margin: 10px 0;'><b>{}</b></p>
-            </div>
-        """.format(selected_category), unsafe_allow_html=True)
-    
-    with insight_col2:
-        cities_analyzed = len(filtered_data)
-        st.markdown("""
-            <div style='background-color: #1E2130; padding: 20px; border-radius: 10px; text-align: center;'>
-                <h3 style='color: #667eea; margin: 0;'>🌎 Cities Analyzed</h3>
-                <p style='color: #888; margin: 5px 0;'>Location opportunities</p>
-                <p style='font-size: 24px; color: white; margin: 10px 0;'><b>{}</b></p>
-            </div>
-        """.format(cities_analyzed), unsafe_allow_html=True)
-    
-    with insight_col3:
-        # If AI analysis was done, show resume score
-        if st.session_state.get('ai_results'):
-            ai_data = st.session_state['ai_results']
-            # Extract a score if available
-            score_display = "✨ AI-Powered"
-        else:
-            score_display = "📊 Ready"
-        
-        st.markdown("""
-            <div style='background-color: #1E2130; padding: 20px; border-radius: 10px; text-align: center;'>
-                <h3 style='color: #ff4b4b; margin: 0;'>🎯 Status</h3>
-                <p style='color: #888; margin: 5px 0;'>Your profile</p>
-                <p style='font-size: 24px; color: white; margin: 10px 0;'><b>{}</b></p>
-            </div>
-        """.format(score_display), unsafe_allow_html=True)
-    
-    st.markdown("---")
-    
-    # Navigation buttons
-    col_btn1, col_btn2, col_btn3 = st.columns(3)
-    
-    with col_btn1:
-        if st.button("📊 View Detailed Data", use_container_width=True):
-            st.session_state['nav_to_tab'] = 'Map View'
-            st.info("👇 Scroll down to the 'Map View' tab and click 'See the math behind your score'")
-    
-    with col_btn2:
-        if st.button("💰 Explore Budget Lab", use_container_width=True):
-            st.session_state['nav_to_tab'] = 'Budget Lab'
-            st.info("👇 Check out the 'Budget Lab' tab for detailed financial breakdown")
-    
-    with col_btn3:
-        if uploaded_file:
-            if st.button("📄 Resume Analysis", use_container_width=True):
-                st.session_state['nav_to_tab'] = 'Resume Pivot'
-                st.info("👇 Go to 'Resume Pivot' tab for your full resume analysis")
-    
-    # Clear the results flag so it doesn't show every time
-    if st.button("✅ Got it! (Close this message)", type="primary"):
-        st.session_state['show_results'] = False
-        st.rerun()
+# Wealth Velocity with progress bar in col2
+with col2:
+    st.metric("💰 Wealth Velocity", f"${top_city_savings:,.0f}/mo", f"in {top_city}")
+    # Progress bar for Financial Freedom based on savings (cap at $5,000)
+    if top_city_savings > 0:
+        progress_value = min(top_city_savings / 5000, 1.0)
+        st.progress(progress_value, text="Financial Freedom Progress")
+    else:
+        st.progress(0, text="Financial Freedom Progress")
+
+col3.metric("💼 Average Salary", f"${avg_salary:,.0f}", "For this role")
 
 st.divider()
 
 # --- TABBED INTERFACE ---
 tab1, tab2, tab3 = st.tabs(["Map View", "Budget Lab", "Resume Pivot"])
+
+# If AI just finished, inject JS to click the Resume Pivot tab
+if st.session_state.get('switch_to_resume_tab', False):
+    st.session_state['switch_to_resume_tab'] = False
+    components.html("""
+        <script>
+            const tabs = window.parent.document.querySelectorAll('button[data-baseweb="tab"]');
+            if (tabs.length >= 3) { tabs[2].click(); }
+        </script>
+    """, height=0)
+    st.toast('🤖 AI Analysis Complete! Results are in the Resume Pivot tab.', icon='✅')
 
 # ========== TAB 1: MAP VIEW ==========
 with tab1:
@@ -251,43 +200,69 @@ with tab1:
     
     st.divider()
     
-    # Enhanced scatter geo map using Salary for size and color
-    hover_data_dict = {
-        'Salary': ':$,.0f',
-        'Rent': ':$,.0f',
-        'COL': True,
-        'State': True,
-        'Lat': False,
-        'Lon': False
-    }
+    # COMMAND CENTER MAP - 3D Scatter Mapbox with Sci-Fi HUD
+    # Normalize salary for bubble size (make high salaries REALLY pop)
+    map_data['Salary_Normalized'] = (map_data['Salary'] / map_data['Salary'].min()) * 50
     
-    fig_map = px.scatter_geo(
+    # Create custom hover template with sci-fi HUD styling
+    map_data['hover_text'] = map_data.apply(
+        lambda row: (
+            f"<b>◢ TARGET ACQUIRED ◣</b><br>"
+            f"<b>LOCATION:</b> {row['City']}, {row['State']}<br>"
+            f"<b>SALARY PROJECTION:</b> ${row['Salary']:,.0f}/yr<br>"
+            f"<b>HOUSING COST:</b> ${row['Rent']:,.0f}/mo<br>"
+            f"<b>COST INDEX:</b> {row['COL']}<br>"
+            f"<b>MISSION STATUS:</b> {int(row['Thriving_Score'])}% VIABLE<br>"
+            f"<b>━━━━━━━━━━━━━━━━</b><br>"
+            f"<b>THREAT LEVEL:</b> {'🟢 SAFE' if row['Thriving_Score'] >= 70 else '🟡 CAUTION' if row['Thriving_Score'] >= 50 else '🔴 DANGER'}"
+        ),
+        axis=1
+    )
+    
+    fig_map = px.scatter_mapbox(
         map_data,
         lat="Lat",
         lon="Lon",
-        size="Salary",
-        color="Salary",
+        size="Salary_Normalized",  # Use normalized salary for dramatic size differences
+        color="Thriving_Score",  # Color by thriving score for good/bad visualization
         hover_name="City",
-        hover_data=hover_data_dict,
-        color_continuous_scale="Viridis",
-        size_max=30,
-        scope="usa",
-        title=f"Best Cities for {selected_category}"
+        color_continuous_scale="RdYlGn",  # Red (bad) to Yellow to Green (good)
+        size_max=45,  # Larger max size for dramatic effect
+        zoom=3,
+        center={"lat": 37.0902, "lon": -95.7129},
+        mapbox_style="carto-darkmatter",  # Dark mode command center aesthetic
+        title=f"<b>COMMAND CENTER</b> // {selected_category.upper()} DEPLOYMENT ZONES",
+        custom_data=['hover_text']
+    )
+    
+    # Update hover template to use our custom sci-fi HUD
+    fig_map.update_traces(
+        hovertemplate='%{customdata[0]}<extra></extra>',
+        marker=dict(opacity=0.8)
     )
     
     fig_map.update_layout(
-        height=600,
-        geo=dict(
-            bgcolor='#0E1117',
-            lakecolor='#1E2130',
-            landcolor='#1E2130',
-            showlakes=True,
-            showcountries=True,
-            countrycolor='#2E3440'
+        height=700,
+        paper_bgcolor='rgba(10, 14, 39, 0.95)',
+        plot_bgcolor='rgba(10, 14, 39, 0.95)',
+        font=dict(color='#00FF94', family='Courier New, monospace', size=14),
+        title=dict(
+            font=dict(size=20, color='#00FF94', family='Courier New, monospace'),
+            x=0.5,
+            xanchor='center'
         ),
-        paper_bgcolor='#0E1117',
-        plot_bgcolor='#0E1117',
-        font=dict(color='white')
+        coloraxis_colorbar=dict(
+            title=dict(
+                text="VIABILITY<br>SCORE",
+                font=dict(color='#00FF94', size=12)
+            ),
+            tickfont=dict(color='#00FF94'),
+            bgcolor='rgba(255, 255, 255, 0.05)',
+            bordercolor='#00FF94',
+            borderwidth=2,
+            len=0.7
+        ),
+        margin=dict(l=0, r=0, t=50, b=0)
     )
     
     st.plotly_chart(fig_map, use_container_width=True)
@@ -302,8 +277,16 @@ with tab1:
 with tab2:
     st.subheader("Financial Reality Check")
     
-    # Add city selector for deep dive analysis
+    # Add city selector for deep dive analysis with toast notification
     target_city = st.selectbox('🎯 Analyze a City', filtered_data['City'].unique())
+    
+    # Trigger toast when city changes
+    if 'last_selected_city' not in st.session_state:
+        st.session_state['last_selected_city'] = target_city
+    
+    if st.session_state['last_selected_city'] != target_city:
+        st.toast(f'🏙️ Simulation Updated: {target_city} selected', icon='🏙️')
+        st.session_state['last_selected_city'] = target_city
     
     # Get the specific city data
     city_data = filtered_data[filtered_data['City'] == target_city].iloc[0]
@@ -313,6 +296,7 @@ with tab2:
     city_rent = city_data['Rent']
     city_state = city_data['State']
     city_col = city_data['COL']
+    city_thriving_score = city_data['Thriving_Score']
     
     # Calculate real financial metrics using logic functions
     monthly_net = calculate_taxes(city_salary, city_state)
@@ -382,30 +366,38 @@ with tab2:
         
         st.plotly_chart(fig_donut, use_container_width=True)
         
-        # Dynamic insight sentence
+        # Dynamic insight sentence with gaming terminology
         if monthly_savings > 0:
-            st.success(f"💰 In **{target_city}**, you will have **${monthly_savings:,.2f}** left over for fun/investing each month.")
+            st.success(f"💰 In **{target_city}**, your Wealth Velocity is **${monthly_savings:,.2f}/mo** - Building your empire!")
         else:
-            st.error(f"⚠️ In **{target_city}**, you may overspend by **${abs(monthly_savings):,.2f}** per month with a {lifestyle} lifestyle.")
+            st.error(f"⚠️ In **{target_city}**, Burn Rate exceeds income by **${abs(monthly_savings):,.2f}/mo** with {lifestyle} lifestyle.")
     
-    # Right Column: Success Checklist & Updated Metrics
+    # Right Column: Success Checklist & Updated Metrics (POST-GAME STATS)
     with right_col:
-        st.markdown("### 📊 Key Financial Metrics")
+        st.markdown("### 📊 Post-Game Financial Stats")
         
-        # Display key metrics
+        # Display key metrics with gaming terminology
         col_a, col_b = st.columns(2)
         with col_a:
-            st.metric("Monthly Net Pay", f"${monthly_net:,.0f}", "After taxes")
-            st.metric("Monthly Expenses", f"${(city_rent + lifestyle_cost + monthly_loan_payment):,.0f}", "Total")
+            st.metric("💵 Net Income", f"${monthly_net:,.0f}/mo", "After taxes")
+            st.metric("🔥 Burn Rate", f"${city_rent:,.0f}/mo", "Housing cost")
         with col_b:
-            st.metric("Projected Savings", f"${monthly_savings:,.0f}/mo", 
+            st.metric("💰 Wealth Velocity", f"${monthly_savings:,.0f}/mo", 
                      "💰" if monthly_savings > 1000 else ("⚠️" if monthly_savings < 0 else "📊"))
-            st.metric("Annual Savings", f"${monthly_savings * 12:,.0f}/yr", "If consistent")
+            st.metric("📈 Annual Projection", f"${monthly_savings * 12:,.0f}/yr", "If consistent")
+        
+        # Progress bar for Wealth Velocity (cap at $5,000)
+        st.markdown("#### 🎯 Financial Freedom Progress")
+        if monthly_savings > 0:
+            wealth_progress = min(monthly_savings / 5000, 1.0)
+            st.progress(wealth_progress, text=f"Wealth Building: {int(wealth_progress * 100)}% to Elite Status")
+        else:
+            st.progress(0, text="Wealth Building: Negative Cash Flow")
         
         st.divider()
         
-        st.markdown("### Success Checklist")
-        st.markdown("Track your financial milestones:")
+        st.markdown("### 🏆 Achievement Tracker")
+        st.markdown("Unlock your financial milestones:")
         
         st.checkbox("✅ Emergency Fund Built (3-6 months)", value=False)
         st.checkbox("✅ 401k Maxed ($23,000/year)", value=False)
@@ -421,8 +413,19 @@ with tab2:
 with tab3:
     st.subheader("Resume Analysis & Career Pivot")
     
+    # Show AI results banner if available
+    if st.session_state.get('ai_results'):
+        st.markdown("""
+            <div style='background: linear-gradient(135deg, #00FF94 0%, #00E5FF 100%); 
+                        padding: 25px; border-radius: 15px; margin-bottom: 25px;
+                        box-shadow: 0 10px 30px rgba(0,0,0,0.3);'>
+                <h2 style='color: #0a0e27; margin: 0; text-align: center;'>🎉 Your AI Resume Analysis is Ready!</h2>
+                <p style='color: #0a0e27; margin: 10px 0 0 0; text-align: center; font-weight: 600;'>Scroll down to see detailed insights</p>
+            </div>
+        """, unsafe_allow_html=True)
+    
     # --- DISPLAY AI RESULTS IF AVAILABLE ---
-    if st.session_state.get('ai_results') and uploaded_file:
+    if st.session_state.get('ai_results'):
         ai_data = st.session_state['ai_results']
         
         # Prominent AI Analysis Results Card
